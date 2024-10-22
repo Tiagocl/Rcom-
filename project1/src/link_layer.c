@@ -3,10 +3,8 @@
 #include "link_layer.h"
 #include "serial_port.h"
 
-//Includes by Me
 #include <stdbool.h>
-#include <stdlib.h>
-#include "../include/alarm.h" // THIS HAS FALSE AND TRUE DEFINED MIGHT GIVE AN ERROR
+
 
 
 // MISC
@@ -59,9 +57,14 @@ enum events{
     RECEIVER_ADDRESS_EVENT = RECEIVER_ADDRESS,
     CONTROL_SET_EVENT = CONTROL_SET,
     CONTROL_UA_EVENT = CONTROL_UA,
+    CONTROL_DISC_EVENT = CONTROL_DISC,
+    CONTROL_RR_0_EVENT = CONTROL_RR_0,
+    CONTROL_RR_1_EVENT = CONTROL_RR_1,
+    CONTROL_REJ_0_EVENT = CONTROL_REJ_0,
+    CONTROL_REJ_1_EVENT = CONTROL_REJ_1,
     BCC1_EVENT,                         //need to assign after calculating
     BCC2_EVENT                          //need to assign after calculating
-} ;
+};
 
 typedef struct{
     enum states origin;
@@ -78,17 +81,21 @@ static enum states goto_BCC_OK(void){return STATE_BCC_OK;};
 static enum states goto_STOP(void){return STATE_STOP;};
 
 
-//Need to add something that allows to the detect an invalid state
 transition transitions[] = {
     {STATE_START, FLAG_EVENT, goto_FLAG_RCV},
     {STATE_FLAG_RCV, FLAG_EVENT, goto_FLAG_RCV},
     {STATE_FLAG_RCV, SENDER_ADDRESS_EVENT, goto_A_RCV},
     {STATE_A_RCV, FLAG_EVENT, goto_FLAG_RCV},
     {STATE_A_RCV, CONTROL_SET_EVENT, goto_C_RCV},
+    {STATE_A_RCV, CONTROL_UA_EVENT, goto_C_RCV},
+    {STATE_A_RCV, CONTROL_DISC_EVENT, goto_C_RCV},
+    {STATE_A_RCV, CONTROL_RR_0_EVENT, goto_C_RCV},
+    {STATE_A_RCV, CONTROL_RR_1_EVENT, goto_C_RCV},
+    {STATE_A_RCV, CONTROL_REJ_0_EVENT, goto_C_RCV},
+    {STATE_A_RCV, CONTROL_REJ_1_EVENT, goto_C_RCV},
     {STATE_C_RCV, BCC1_EVENT, goto_BCC_OK},
     {STATE_BCC_OK, FLAG_EVENT, goto_STOP},
     //{STATE_STOP, BCC2, goto_START} //This is the last state, so it should go back to the start?
-    //Above is exactly what we wewre talking about, that at this state it can receive anything, but there is no transition for it
 
 };
 #define TRANS_COUNT sizeof(transitions)/sizeof(transitions[0])
@@ -118,12 +125,6 @@ Rx State Machine receives a Frame
 */
 
 
-//Notes
-    /*
-        the state machine is going to receive a state 
-    */
-
-
 // The state machine
 int state_machine(unsigned char buf[], int readBytes) {
     
@@ -136,9 +137,11 @@ int state_machine(unsigned char buf[], int readBytes) {
             if (transitions[j].origin == current_state) {
                 if(current_state == STATE_C_RCV){
                     if (i>=2 && buf[i] == (buf[i-1] ^ buf[i-2])){ // BCC1 = A ^ C
-                        BCC1_EVENT = buf[i];
+                        //BCC1_EVENT = buf[i];///ERROR TRYNG
+                        current_state = goto_BCC_OK();
+                        OTHER_RCV = FALSE;
                     } 
-
+                }
                 if (transitions[j].input == buf[i]) {
                     current_state = transitions[j].transition_function();
                     OTHER_RCV = FALSE;
@@ -336,12 +339,82 @@ int llwrite(const unsigned char *buf, int bufSize)
     return 0;
 }
 
+
+//LLREAD notes
+/*  
+    - 
+    - We have to perform destuffing 
+    - The receiver will read one packet of an Iframe at a time using a state machine
+    - The receiver will only accept frames with the correct address 
+    - The control field is now used to number the frames
+
+*/
+
+
 ////////////////////////////////////////////////
 // LLREAD
 ////////////////////////////////////////////////
 int llread(unsigned char *packet)
 {
+    unsigned char stuffed_iframe[MAX_PAYLOAD_SIZE * 2] = {0};
+    unsigned char receiverBuf[1] = {0};
+    unsigned stuffed_iframe_size = 0;
 
+    enum states current_state = STATE_START;
+    
+    while (TRUE)
+    {
+        printf("Reading\n");
+        while (TRUE)
+        {
+            int bytesRead = read(fd, receiverBuf, 1);
+            if (bytesRead <= 0){
+                printf("Read no Bytes From Serial Port\n");
+                continue;
+            }
+
+            switch (current_state){
+                case STATE_START:
+                    if (receiverBuf[0] == FLAG){
+                        current_state = STATE_FLAG_RCV;
+                        stuffed_iframe_size++;
+                        stuffed_iframe[stuffed_iframe_size] = receiverBuf[0];
+                    }
+                    break;
+
+                case STATE_FLAG_RCV:
+                    if (receiverBuf[0] == FLAG){
+                        current_state = STATE_FLAG_RCV; ///////////////Should i send to the first state?
+                    } else {
+                        current_state = STATE_STOP;
+                        stuffed_iframe_size++;
+                        stuffed_iframe[stuffed_iframe_size] = receiverBuf[0];
+                    }
+                    break;
+
+                case STATE_STOP:
+                    if (receiverBuf[0] == FLAG){
+                        current_state = STATE_START;
+                        stuffed_iframe_size++;
+                        stuffed_iframe[stuffed_iframe_size] = receiverBuf[0];
+                    }
+                    break;
+
+                    
+                   
+                
+            }
+            
+
+        }
+        
+        
+
+    }
+    
+    
+
+    
     
 
     return 0;

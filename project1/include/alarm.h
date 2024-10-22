@@ -1,9 +1,10 @@
 #ifndef _ALARM_H_
 #define _ALARM_H_
 
-#include <unistd.h>
+
 #include <signal.h>
 #include <stdio.h>
+#include <unistd.h>
 
 #define FALSE 0
 #define TRUE 1
