@@ -5,6 +5,11 @@
 #include <stdio.h>
 
 
+// Control variables
+volatile int alarmEnabled = FALSE;
+volatile int alarmCount = 0;
+
+
 void alarmHandler(int signal)
 {
     alarmEnabled = FALSE;

@@ -4,8 +4,8 @@
 #define FALSE 0
 #define TRUE 1
 
-volatile int alarmEnabled = FALSE;
-volatile int alarmCount = 0;
+extern volatile int alarmEnabled;
+extern volatile int alarmCount;
 
 // Alarm function handler
 void alarmHandler(int signal);

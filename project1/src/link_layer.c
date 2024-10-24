@@ -20,10 +20,6 @@
 
 int fd;  // Global File descriptor
 
-//External Variables
-extern volatile int alarmEnabled;
-extern volatile int alarmCount;
-
 //Global Variables
 
 // MISC
