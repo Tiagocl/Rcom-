@@ -1,4 +1,5 @@
 // Link layer protocol implementation
+
 #include <fcntl.h> // File control not working
 #include <stdlib.h>
 #include <string.h>
@@ -9,6 +10,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <stdbool.h>
+#include <unistd.h>
 
 #include "link_layer.h"
 #include "serial_port.h"

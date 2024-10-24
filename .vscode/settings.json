@@ -2,6 +2,7 @@
     "files.associations": {
         "serial_port.h": "c",
         "link_layer.h": "c",
-        "alarm.h": "c"
+        "alarm.h": "c",
+        "sched.h": "c"
     }
 }
