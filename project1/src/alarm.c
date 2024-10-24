@@ -1,4 +1,11 @@
-#include "../include/alarm.h"
+#include "alarm.h"
+
+#include <unistd.h>
+#include <signal.h>
+#include <stdio.h>
+
+volatile int alarmEnabled;
+volatile int alarmCount = 0;
 
 void alarmHandler(int signal)
 {
@@ -20,6 +27,5 @@ void setAlarm(int timeout)
         alarmEnabled = TRUE;
     }
     
-
     printf("Ending program\n");
 }

@@ -1,11 +1,25 @@
 // Link layer protocol implementation
+#include <fcntl.h> // File control not working
+#include <stdlib.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <termios.h>
+#include <math.h>
+#include <stdio.h>
+#include <time.h>
+#include <stdbool.h>
 
 #include "link_layer.h"
 #include "serial_port.h"
+#include "alarm.h"
+extern int fd;  // Global File descriptor
 
-#include <stdbool.h>
+//External Variables
+extern volatile int alarmEnabled;
+extern volatile int alarmCount;
 
-
+//Global Variables
 
 // MISC
 #define _POSIX_SOURCE 1 // POSIX compliant source
@@ -28,17 +42,6 @@
 //Information Frame Specific Values
 #define INFO_FRAME_0 0x00
 #define INFO_FRAME_1 0x80
-
-
-//External Variables
-
-extern int alarmEnabled;
-extern int alarmCount;
-
-
-
-//Global Variables
-int fd;  // Global File descriptor
 
 typedef enum states (*State_transition)(void);
 
