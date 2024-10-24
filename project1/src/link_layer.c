@@ -12,7 +12,7 @@
 #include <stdbool.h>
 #include <unistd.h>
 
-#include <signal.h> //enabling functionality of alarm
+//#include <signal.h> //enabling functionality of alarm
 
 #include "link_layer.h"
 #include "serial_port.h"
