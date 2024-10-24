@@ -1,6 +1,6 @@
 // Link layer protocol implementation
 
-#include <fcntl.h> // File control not working
+#include <fcntl.h> // File control works but when I include it, it gives me an error
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
@@ -12,10 +12,13 @@
 #include <stdbool.h>
 #include <unistd.h>
 
+#include <signal.h> //enabling functionality of alarm
+
 #include "link_layer.h"
 #include "serial_port.h"
 #include "alarm.h"
-extern int fd;  // Global File descriptor
+
+int fd;  // Global File descriptor
 
 //External Variables
 extern volatile int alarmEnabled;

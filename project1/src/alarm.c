@@ -4,8 +4,6 @@
 #include <signal.h>
 #include <stdio.h>
 
-volatile int alarmEnabled;
-volatile int alarmCount = 0;
 
 void alarmHandler(int signal)
 {
