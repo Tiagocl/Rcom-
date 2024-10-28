@@ -75,7 +75,6 @@ int controlBuilder(const char *filename,unsigned char *start_packet, unsigned ch
     end_packet[0] = CONTROL_END;
 
     return idx;
-
 }
 
 int dataBuilder(unsigned char* packet, unsigned char* packet_payload, int nSequence, int nBytes) {
@@ -119,6 +118,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
     if(data_link_id < 0){
         printf("Error: llopen\n");
+        printf("Error: Data Link Id = %d \n", data_link_id);
         return;
     }
 

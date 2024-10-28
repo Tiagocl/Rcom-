@@ -247,7 +247,7 @@ int llopen(LinkLayer connectionParameters) {
     // Set input mode (non-canonical, no echo,...)
     newtio.c_lflag = 0;
     newtio.c_cc[VTIME] = 0; // Inter-character timer unused
-    newtio.c_cc[VMIN] = 1;  // Blocking read until 5 chars received
+    newtio.c_cc[VMIN] = 5;  // Blocking read until 5 chars received
 
     // VTIME e VMIN should be changed in order to protect with a
     // timeout the reception of the following character(s)
@@ -267,6 +267,9 @@ int llopen(LinkLayer connectionParameters) {
 
     printf("New termios structure set\n");
 
+    printf("Serial port opened\n");
+    printf("connectionParameters.role: %d\n", connectionParameters.role);
+
     if(connectionParameters.role == LlTx){
         int num_retransmissions = connectionParameters.nRetransmissions;
         int timeout = connectionParameters.timeout;
@@ -282,10 +285,14 @@ int llopen(LinkLayer connectionParameters) {
         transmissionBuf[3] = SENDER_ADDRESS ^ CONTROL_SET;
         transmissionBuf[4] = FLAG;
 
+        printf("SET Frame Built\n");
+        printf("Set Frame: %x %x %x %x %x\n", transmissionBuf[0], transmissionBuf[1], transmissionBuf[2], transmissionBuf[3], transmissionBuf[4]);
+
         //Retransmission loop
         while (alarmCount < num_retransmissions) {
             if(!alarmEnabled){
                 int bytes = write(fd, transmissionBuf, sizeof(transmissionBuf));
+                printf("Bytes Sent: %d\n", bytes);
                 if(bytes < 5){
                     printf("Error Sending SET Frame\n");
                     return -1;
@@ -313,7 +320,7 @@ int llopen(LinkLayer connectionParameters) {
     } else {
         unsigned char receiverBuf[BUF_SIZE] = {0}; 
         int bytesRead = read(fd, receiverBuf, sizeof(receiverBuf));
-        
+        printf("Bytes Read: %d\n", bytesRead);
         if (bytesRead < 5){ // 5 bytes is the minimum size of a frame
             printf("Error Receiving SET Frame: Invalid Number of Bytes read\n");
             return -1;
