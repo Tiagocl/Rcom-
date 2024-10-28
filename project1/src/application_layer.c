@@ -1,14 +1,3 @@
-<<<<<<< Updated upstream
-// Application layer protocol implementation
-
-#include "application_layer.h"
-
-void applicationLayer(const char *serialPort, const char *role, int baudRate,
-                      int nTries, int timeout, const char *filename)
-{
-    // TODO
-}
-=======
 // Application layer protocol implementation
 
 #include <string.h>
@@ -247,4 +236,3 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     llclose(data_link_id);
 
 }
->>>>>>> Stashed changes

@@ -14,7 +14,7 @@
 // MISC
 #define _POSIX_SOURCE 1 // POSIX compliant source
 
-int fd = -1; // File descriptor for open serial port
+int spfd = -1; // Global file descriptor for open serial port
 struct termios oldtio; // Serial port settings to restore on closing
 
 // Open and configure the serial port.
@@ -24,15 +24,15 @@ int openSerialPort(const char *serialPort, int baudRate)
     // Open with O_NONBLOCK to avoid hanging when CLOCAL
     // is not yet set on the serial port (changed later)
     int oflags = O_RDWR | O_NOCTTY | O_NONBLOCK;
-    fd = open(serialPort, oflags);
-    if (fd < 0)
+    spfd = open(serialPort, oflags);
+    if (spfd < 0)
     {
         perror(serialPort);
         return -1;
     }
 
     // Save current port settings
-    if (tcgetattr(fd, &oldtio) == -1)
+    if (tcgetattr(spfd, &oldtio) == -1)
     {
         perror("tcgetattr");
         return -1;
@@ -69,27 +69,27 @@ int openSerialPort(const char *serialPort, int baudRate)
     newtio.c_cc[VTIME] = 0; // Block reading
     newtio.c_cc[VMIN] = 1;  // Byte by byte
 
-    tcflush(fd, TCIOFLUSH);
+    tcflush(spfd, TCIOFLUSH);
 
     // Set new port settings
-    if (tcsetattr(fd, TCSANOW, &newtio) == -1)
+    if (tcsetattr(spfd, TCSANOW, &newtio) == -1)
     {
         perror("tcsetattr");
-        close(fd);
+        close(spfd);
         return -1;
     }
 
     // Clear O_NONBLOCK flag to ensure blocking reads
     oflags ^= O_NONBLOCK;
-    if (fcntl(fd, F_SETFL, oflags) == -1)
+    if (fcntl(spfd, F_SETFL, oflags) == -1)
     {
         perror("fcntl");
-        close(fd);
+        close(spfd);
         return -1;
     }
 
     // Done
-    return fd;
+    return spfd;
 }
 
 
@@ -98,13 +98,13 @@ int openSerialPort(const char *serialPort, int baudRate)
 int closeSerialPort(void)
 {
     // Restore the old port settings
-    if (tcsetattr(fd, TCSANOW, &oldtio) == -1)
+    if (tcsetattr(spfd, TCSANOW, &oldtio) == -1)
     {
         perror("tcsetattr");
         return -1;
     }
 
-    return close(fd);
+    return close(spfd);
 }
 
 
@@ -113,7 +113,7 @@ int closeSerialPort(void)
 // Returns -1 on error, 0 if no byte was received, 1 if a byte was received.
 int readByte(char *byte)
 {
-    return read(fd, byte, 1);
+    return read(spfd, byte, 1);
 }
 
 
@@ -122,5 +122,5 @@ int readByte(char *byte)
 // Returns -1 on error, otherwise the number of bytes written.
 int writeBytes(const char *bytes, int numBytes)
 {
-    return write(fd, bytes, numBytes);
+    return write(spfd, bytes, numBytes);
 }
