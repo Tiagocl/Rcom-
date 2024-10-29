@@ -51,6 +51,10 @@ int retransmissionTimeout = 3; // Timeout for retransmissions
 #define INFO_FRAME_0 0x00
 #define INFO_FRAME_1 0x80
 
+//Stuffing
+#define ESCAPE 0x7D
+#define XOR_BYTE 0x20
+
 typedef enum states (*State_transition)(void);
 
 enum states{
@@ -220,9 +224,10 @@ int llopen(LinkLayer connectionParameters) {
     // Open serial port device for reading and writing and not as controlling tty
     // because we don't want to get killed if linenoise sends CTRL-C.
     
-    
+ 
+    /*
     //NONBLOCKING IS MISSIng
-    fd = open(connectionParameters.serialPort, O_RDWR | O_NOCTTY);
+    fd = open(connectionParameters.serialPort, O_RDWR | O_NOCTTY | O_NONBLOCK);
     if (fd < 0) {
         perror(connectionParameters.serialPort);
         exit(-1);
@@ -247,7 +252,7 @@ int llopen(LinkLayer connectionParameters) {
     // Set input mode (non-canonical, no echo,...)
     newtio.c_lflag = 0;
     newtio.c_cc[VTIME] = 0; // Inter-character timer unused
-    newtio.c_cc[VMIN] = 5;  // Blocking read until 5 chars received
+    newtio.c_cc[VMIN] = 1;  // Blocking read until 5 chars received
 
     // VTIME e VMIN should be changed in order to protect with a
     // timeout the reception of the following character(s)
@@ -268,7 +273,17 @@ int llopen(LinkLayer connectionParameters) {
     printf("New termios structure set\n");
 
     printf("Serial port opened\n");
-    printf("connectionParameters.role: %d\n", connectionParameters.role);
+    printf("connectionParameters.role: %d\n", connectionParameters.role);*/
+
+
+    fd = openSerialPort(connectionParameters.serialPort, connectionParameters.baudRate);
+
+    if (fd < 0) {
+        printf("Error: Opening Serial Port\n");
+        return -1;
+    }
+   
+    
 
     if(connectionParameters.role == LlTx){
         int num_retransmissions = connectionParameters.nRetransmissions;
@@ -318,13 +333,28 @@ int llopen(LinkLayer connectionParameters) {
         }
         
     } else {
-        unsigned char receiverBuf[BUF_SIZE] = {0}; 
+        unsigned char receiverBuf[6] = {0}; 
+        int bytesRead = 0;
+        
+        for (int i = 0; i < 5; i++){
+            read(fd, &receiverBuf[i], 1);
+            bytesRead++;
+        }
+
+        printf("Bytes Read: %d\n", bytesRead);
+        printf("Receiver buf size: %d\n", sizeof(receiverBuf));
+        if (bytesRead < 5){ // 5 bytes is the minimum size of a frame
+            printf("Error Receiving SET Frame: Invalid Number of Bytes read\n");
+            return -1;
+        }
+        /*
         int bytesRead = read(fd, receiverBuf, sizeof(receiverBuf));
         printf("Bytes Read: %d\n", bytesRead);
         if (bytesRead < 5){ // 5 bytes is the minimum size of a frame
             printf("Error Receiving SET Frame: Invalid Number of Bytes read\n");
             return -1;
         }
+        */
 
         if(state_machine(receiverBuf, bytesRead) != TRUE){
             printf("Error Receiving SET Frame: State Machine Stopped\n");
@@ -352,15 +382,118 @@ int llopen(LinkLayer connectionParameters) {
     return -1;   //connectionParameters.role;???
 }
 
+// LLWRITE notes
+/*
+    -
+    - We have to perform byte stuffing
+
+*/
+int performByteStuffing(const unsigned char *input, int inputSize, unsigned char *output) {
+    int outputSize = 0; 
+
+    for(int i=0; i<inputSize;i++) {
+        unsigned char byte = input[i];
+
+        if(byte == FLAG) {
+            output[outputSize++] = ESCAPE;
+            output[outputSize++] = FLAG ^ XOR_BYTE;
+        }
+        else if (byte == ESCAPE) {
+            output[outputSize++] = ESCAPE; 
+            output[outputSize++] = ESCAPE ^ XOR_BYTE;
+        }
+        else {
+            output[outputSize++] = byte;
+        }
+    }
+    return outputSize;
+}
+
 ////////////////////////////////////////////////
 // LLWRITE
 ////////////////////////////////////////////////
-int llwrite(const unsigned char *buf, int bufSize)
-{
-    
+int llwrite(const unsigned char *buf, int bufSize){
+    int frameSize = 0;
+    static unsigned char current_control_field = INFO_FRAME_0;
+    unsigned char frame[BUF_SIZE] = {0};
+    int max_retranfsmissions = 3;
+    int attempts = 0;
+    bool ack_received = false;
 
-    return 0;
+    while (attempts < max_retranfsmissions && !ack_received){
+        frameSize = 0;
+        frame[frameSize++] = FLAG;
+        frame[frameSize++] = SENDER_ADDRESS;
+        frame[frameSize++] = current_control_field;
+        frame[frameSize++] = SENDER_ADDRESS ^ current_control_field;
+
+        // add data payload and calculte BCC2
+        unsigned char stuffedData[BUF_SIZE] = {0};
+        unsigned char BCC2 = 0;
+
+        for (int i = 0; i < bufSize; i++){
+            BCC2 ^= buf[i];
+        }
+
+        int stuffedDataSize = performByteStuffing(buf,bufSize,stuffedData);
+        // frame[frameSize++] = BCC2;
+        // frame[frameSize++] = FLAG;
+
+        //copy stuffed data to the frame 
+        memcpy(&frame[frameSize],stuffedData,stuffedDataSize);
+        frameSize += stuffedDataSize;
+
+        //add BCC2 to frame and apply stuffing to BCC2 
+        unsigned char stuffedBCC2[2];
+        int stuffedBCC2Size = performByteStuffing(&BCC2,1,stuffedBCC2);
+
+        memcpy(&frame[frameSize],stuffedBCC2,stuffedBCC2Size);
+        frameSize += stuffedBCC2Size;
+
+
+        // send the frame over the serial port
+        int bytesWritten = write(fd, frame, frameSize);
+        if (bytesWritten < 0){
+            perror("Error writing frame");
+            return -1;
+        }
+
+        printf("Frame sent, awaiting acknowledgment...\n");
+
+        // wait for acknowledgment or negative acknowledgment
+        unsigned char response[5] = {0};
+        int responseSize = read(fd, response, sizeof(response));
+
+        if (responseSize < 5){
+            printf("Error: Incomplete responde received\n");
+            attempts++;
+            continue;
+        }
+
+        if (response[0] == FLAG && response[4] == FLAG){
+            if (response[2] == CONTROL_RR_0 || response[2] == CONTROL_RR_1){
+                printf("Ack (RR) received\n");
+                ack_received = true;
+                current_control_field = (current_control_field == INFO_FRAME_0) ? INFO_FRAME_1 : INFO_FRAME_0;
+            }
+            else if (response[2] == CONTROL_REJ_0 || response[2] == CONTROL_REJ_1){
+                printf("Negative Ack (REJ) received\n");
+                attempts++;
+            }
+         } else{
+                printf("Error: Invalid control field in response\n");
+                attempts++;
+            }
+        }
+        if (!ack_received){
+            printf("Max number of retransmissions reached, frame not sent successfully\n");
+            return -1;
+        }
+        return frameSize;
+    
 }
+
+
 
 
 //LLREAD notes
@@ -377,13 +510,24 @@ int llwrite(const unsigned char *buf, int bufSize)
 ////////////////////////////////////////////////
 
 unsigned char rejectFrameCalculator(unsigned char control_received){
-    if (control_received == BIT(0)){
+    if (control_received == 0x00){
         return CONTROL_REJ_0;
-    } else if (control_received == BIT(1)){
+    } else if (control_received == 0x80){
         return CONTROL_REJ_1;
     } else {
         printf("Error: REJECT Frame\n");
-        return -1;
+    }
+    return -1;
+}
+
+
+unsigned char readyFrameCalculator(unsigned char control_received){
+    if (control_received == 0x00){
+        return CONTROL_RR_1;
+    } else if (control_received == 0x80){
+        return CONTROL_REJ_0;
+    } else {
+        printf("Error: Receiver Ready Frame\n");
     }
     return -1;
 }
@@ -409,12 +553,16 @@ void destuff_frame(const unsigned char *input_frame, int input_len, unsigned cha
 
 bool BCC2_validation(const unsigned char *frame, int packet_size) {
     unsigned char bcc2 = frame[packet_size - 2];
-    unsigned char bcc2_calculated = 0;
+    unsigned char bcc2_calculated = frame[4];
     
-    for (int i = 4; i < packet_size - 2; i++) {
+    printf("Packet Size: %d\n", packet_size);
+
+    for (int i = 5; i < packet_size - 2; i++) {
         bcc2_calculated ^= frame[i];
     }
     
+    printf("BCC2: 0x%02X\n", bcc2_calculated);
+
     if (bcc2 != bcc2_calculated){
         return FALSE;
     } 
@@ -465,8 +613,7 @@ int llread(unsigned char *packet)
                 case STATE_START:
                     if (receiverBuf[0] == FLAG){
                         current_state = STATE_FLAG_RCV;
-                        stuffed_iframe_size++;
-                        stuffed_iframe[stuffed_iframe_size] = receiverBuf[0];
+                        stuffed_iframe[stuffed_iframe_size++] = receiverBuf[0];
                     }
                     break;
 
@@ -475,14 +622,13 @@ int llread(unsigned char *packet)
                         current_state = STATE_FLAG_RCV; ///////////////Should i send to the first state?
                     } else {
                         current_state = STATE_STOP;
-                        stuffed_iframe_size++;
-                        stuffed_iframe[stuffed_iframe_size] = receiverBuf[0];
+                        stuffed_iframe[stuffed_iframe_size++] = receiverBuf[0];
                     }
                     break;
 
                 case STATE_STOP:
-                        stuffed_iframe_size++;
-                        stuffed_iframe[stuffed_iframe_size] = receiverBuf[0];
+                        stuffed_iframe[stuffed_iframe_size++] = receiverBuf[0];
+                        
 
                     if (receiverBuf[0] == FLAG){
                         current_state = STATE_START;
@@ -500,11 +646,16 @@ int llread(unsigned char *packet)
             //to calculate the REJ frame i need to know the frame number of the frame that was received
             //if the frame number is 0, the REJ frame will have the control field with the frame number 1 and vice versa
             unsigned char bcc1 = stuffed_iframe[1] ^ stuffed_iframe[2];
+            printf("stuff_iframe[0]: 0x%02X\n", stuffed_iframe[0]);
+            printf("stuff_iframe[1]: 0x%02X\n", stuffed_iframe[1]);
+            printf("stuff_iframe[2]: 0x%02X\n", stuffed_iframe[2]);
+            printf("BCC1 > 0x%02X\n", bcc1);
 
             if(bcc1 != stuffed_iframe[3] || stuffed_iframe[2] == rxFrameNumber){        //////////////// I need to discern that a dulicated fame is ignores and sent the RR command back
                 printf("Error: BCC1 Mismatch\n");
                 printf("Error: OR\n");
                 printf("Error: Frame Number Mismatch\n");
+                printf("Error: Frame Number > %d\n", stuffed_iframe[2]);
 
                 unsigned char rej_command[5] = {0};
                 rej_command[0] = FLAG;
@@ -525,9 +676,16 @@ int llread(unsigned char *packet)
             destuff_frame(stuffed_iframe, stuffed_iframe_size, destuffed_iframe, &destuffed_iframe_size);
 
             //verifying the BCC2
+            printf("Destuffed Frame Size: %d\n", destuffed_iframe_size);
             int packet_size = packet_size_calculator(destuffed_iframe, destuffed_iframe_size);
 
-            if(BCC2_validation(destuffed_iframe, packet_size)){
+            printf("Destuffed iframe:\n");
+            for (int i = 0; i < destuffed_iframe_size; i++) {
+                printf("0x%02X ", destuffed_iframe[i]);
+            }
+            printf("\n");
+
+            if(BCC2_validation(destuffed_iframe, destuffed_iframe_size)){     //////////////// Changed 2nd argument from packet size to destuffed_iframe_size
                 if(destuffed_iframe[4] == 0x01){
                     
                     if(destuffed_iframe[2] == rxFrameNumber){
@@ -537,12 +695,26 @@ int llread(unsigned char *packet)
                     }
 
                 }
-                    
+                
+                printf("BCC2 Validation Passed\n");
+                printf("Frame Number: %d\n", destuffed_iframe[2]);
                 unsigned char rr_command[5] = {0};
                 rr_command[0] = FLAG;
                 rr_command[1] = SENDER_ADDRESS;
-                rr_command[2] = rxFrameNumber == 0 ? CONTROL_RR_1 : CONTROL_RR_0;
-                rr_command[3] = rr_command[1] ^ rr_command[2];                    rr_command[4] = FLAG;
+                rr_command[2] = readyFrameCalculator(destuffed_iframe[2]);           //////////////// Changed rxFrameNumber to txFrameNumber ptobably not the best idea
+                rr_command[3] = rr_command[1] ^ rr_command[2];                    
+                rr_command[4] = FLAG;
+
+                printf("Sending RR Frame\n");
+                // Print the rr_command in hex
+                printf("RR Command:\n");
+                for (int i = 0; i < 5; i++) {
+                    printf("0x%02X ", rr_command[i]);
+                }
+                printf("\n");
+                //make a for loop that prints the rr_command in hex
+
+
                 int valid = write(fd, rr_command, sizeof(rr_command));
                 if (valid < 0){
                     printf("Error: Writing RR Frame\n");
@@ -566,9 +738,16 @@ int llread(unsigned char *packet)
             }
 
             memset(packet,0,sizeof(*packet)); //Added * to clear warning
-            for (int i = 4; i < packet_size - 6; i++){  // 6 bytes are the header and trailer
+            for (int i = 4; i < destuffed_iframe_size - 6; i++){  // 6 bytes are the header and trailer  //////////////// OPTIMIZATIONS FOR LATER//changed packet_size to destuffed_iframe_size
                 packet[i - 4] = destuffed_iframe[i];
             }
+
+            // Print the packet in hex
+            printf("Packet:\n");
+            for (int i = 0; i < destuffed_iframe_size - 6; i++) {
+                printf("0x%02X ", packet[i]);
+            }
+            printf("\n");
 
             txFrameNumber = !txFrameNumber;
             rxFrameNumber = !rxFrameNumber;

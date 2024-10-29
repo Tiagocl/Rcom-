@@ -19,29 +19,25 @@ struct termios oldtio; // Serial port settings to restore on closing
 
 // Open and configure the serial port.
 // Returns -1 on error.
-int openSerialPort(const char *serialPort, int baudRate)
-{
+int openSerialPort(const char *serialPort, int baudRate) {
     // Open with O_NONBLOCK to avoid hanging when CLOCAL
     // is not yet set on the serial port (changed later)
     int oflags = O_RDWR | O_NOCTTY | O_NONBLOCK;
     spfd = open(serialPort, oflags);
-    if (spfd < 0)
-    {
+    if (spfd < 0) {
         perror(serialPort);
         return -1;
     }
 
     // Save current port settings
-    if (tcgetattr(spfd, &oldtio) == -1)
-    {
+    if (tcgetattr(spfd, &oldtio) == -1) {
         perror("tcgetattr");
         return -1;
     }
 
     // Convert baud rate to appropriate flag
     tcflag_t br;
-    switch (baudRate)
-    {
+    switch (baudRate) {
         case 1200: br = B1200; break;
         case 1800: br = B1800; break;
         case 2400: br = B2400; break;
@@ -67,7 +63,7 @@ int openSerialPort(const char *serialPort, int baudRate)
     // Set input mode (non-canonical, no echo,...)
     newtio.c_lflag = 0;
     newtio.c_cc[VTIME] = 0; // Block reading
-    newtio.c_cc[VMIN] = 1;  // Byte by byte
+    newtio.c_cc[VMIN] = 5;  // Byte by byte
 
     tcflush(spfd, TCIOFLUSH);
 
@@ -75,6 +71,7 @@ int openSerialPort(const char *serialPort, int baudRate)
     if (tcsetattr(spfd, TCSANOW, &newtio) == -1)
     {
         perror("tcsetattr");
+        printf("Error: tcsetattr\n");
         close(spfd);
         return -1;
     }
@@ -84,10 +81,12 @@ int openSerialPort(const char *serialPort, int baudRate)
     if (fcntl(spfd, F_SETFL, oflags) == -1)
     {
         perror("fcntl");
+        printf("Error: fcntl\n");
         close(spfd);
         return -1;
     }
 
+    
     // Done
     return spfd;
 }
