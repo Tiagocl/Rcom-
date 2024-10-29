@@ -1,16 +1,21 @@
-#include "alarm.h"
+// Alarm example
+//
+// Modified by: Eduardo Nuno Almeida [enalmeida@fe.up.pt]
+//              Rui Prior [rcprior@fc.up.pt]
 
 #include <unistd.h>
 #include <signal.h>
 #include <stdio.h>
+#include <unistd.h>
 #include <stdlib.h>
 
+#define FALSE 0
+#define TRUE 1
 
-// Control variables
-volatile int alarmEnabled = FALSE;
-volatile int alarmCount = 0;
+int alarmEnabled = FALSE;
+int alarmCount = 0;
 
-
+// Alarm function handler
 void alarmHandler(int signal)
 {
     alarmEnabled = FALSE;
@@ -19,7 +24,7 @@ void alarmHandler(int signal)
     printf("Alarm #%d\n", alarmCount);
 }
 
-void setAlarm(int timeout)
+int main()
 {
     // Set alarm function handler
     struct sigaction act = { 0 };
@@ -29,12 +34,16 @@ void setAlarm(int timeout)
         exit(EXIT_FAILURE);
     }
 
-    
-    if (alarmEnabled == FALSE)
+    while (alarmCount < 4)
     {
-        alarm(timeout); // Set alarm to be triggered to a specific timeout
-        alarmEnabled = TRUE;
+        if (alarmEnabled == FALSE)
+        {
+            alarm(3); // Set alarm to be triggered in 3s
+            alarmEnabled = TRUE;
+        }
     }
-    
+
     printf("Ending program\n");
+
+    return 0;
 }

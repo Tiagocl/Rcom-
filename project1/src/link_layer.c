@@ -20,9 +20,11 @@
 
 //Global Variables
 int fd;  // Global File descriptor
+
 int txFrameNumber = 0; // Frame number for the transmitter
 int rxFrameNumber = 1; // Frame number for the receiver
 int lastFrameNumber = -1; // Last frame number fully received
+
 int retransmissionAttempts = 3; // Counter for the number of retransmissions
 int retransmissionTimeout = 3; // Timeout for retransmissions
 
@@ -185,35 +187,45 @@ int state_machine(unsigned char *buf, int readBytes) {
 // LLOPEN - AUXILIARY FUNCTIONS
 ////////////////////////////////////////////////
 
-int checkUAFrame(int fd, unsigned char *receiverBuf, size_t bufSize) {
-    int response = read(fd, receiverBuf, bufSize);
-    if (response < 0) {
+int checkUAFrame(int fd, unsigned char *receiverBuf, size_t buff_size) {
+    
+    printf("Bytes checkUAFrame Read: %lu\n", buff_size);
+
+    //int response = read(fd, receiverBuf, bufSize);
+
+    if (buff_size < 0) {
         perror("Error receiving UA frame");
-        return -1;
+        return FALSE;
     }
 
-    if (response < 5) {
+    if (buff_size < 5) {
         printf("Error: Incomplete UA frame received\n");
-        return -1;
+        return FALSE;
+    }
+
+    for (int i = 0; i < 5; i++){
+        printf("Check UA ReceiverBuf[%d]: %02x\n", i, receiverBuf[i]);
     }
 
     if (receiverBuf[0] != FLAG || receiverBuf[4] != FLAG) {
         printf("Error: UA frame FLAG field mismatch\n");
-        return -1;
+        return FALSE;
     }
+
+    
 
     if (receiverBuf[2] != CONTROL_UA) {
         printf("Error: UA frame CONTROL field mismatch\n");
-        return -1;
+        return FALSE;
     }
 
     unsigned char bcc1 = receiverBuf[1] ^ receiverBuf[2];
     if (receiverBuf[3] != bcc1) {
         printf("Error: UA frame BCC1 field mismatch\n");
-        return -1;
+        return FALSE;
     }
 
-    return 0;
+    return TRUE;
 }
 
 
@@ -314,7 +326,22 @@ int llopen(LinkLayer connectionParameters) {
                 }
                 setAlarm(connectionParameters.timeout);
             } else {
-                if (checkUAFrame(fd, receiverBuf, sizeof(receiverBuf)) != 0) { //Does it need to be a pointer??? receiver buf == 0) {
+                int receiver_buff_size = 0;
+                for (int i = 0; i < 5; i++){
+                    if(read(fd, &receiverBuf[i], 1) != 0){  //?? do i need that on receiverBuf?
+                        receiver_buff_size++;
+                    } 
+                }
+
+                printf("Receiver Buff Size: %d\n", receiver_buff_size);
+
+                for (int i = 0; i < receiver_buff_size; i++){
+                    printf("ReceiverBuf[%d]: %02x\n", i, receiverBuf[i]);
+                }
+                
+                int checkUA = checkUAFrame(fd, receiverBuf, receiver_buff_size);
+                printf("CheckUA: %d\n", checkUA);
+                if (checkUA == 0) { //Does it need to be a pointer??? receiver buf == 0) {
                     alarmEnabled = FALSE;
                     continue;
                 } else {
@@ -333,7 +360,7 @@ int llopen(LinkLayer connectionParameters) {
         }
         
     } else {
-        unsigned char receiverBuf[6] = {0}; 
+        unsigned char receiverBuf[5] = {0}; 
         int bytesRead = 0;
         
         for (int i = 0; i < 5; i++){
@@ -341,8 +368,9 @@ int llopen(LinkLayer connectionParameters) {
             bytesRead++;
         }
 
+
         printf("Bytes Read: %d\n", bytesRead);
-        printf("Receiver buf size: %d\n", sizeof(receiverBuf));
+        printf("Receiver buf size: %lu\n", sizeof(receiverBuf));
         if (bytesRead < 5){ // 5 bytes is the minimum size of a frame
             printf("Error Receiving SET Frame: Invalid Number of Bytes read\n");
             return -1;
@@ -415,10 +443,15 @@ int performByteStuffing(const unsigned char *input, int inputSize, unsigned char
 int llwrite(const unsigned char *buf, int bufSize){
     int frameSize = 0;
     static unsigned char current_control_field = INFO_FRAME_0;
-    unsigned char frame[BUF_SIZE] = {0};
+    unsigned char frame[MAX_PAYLOAD_SIZE *2] = {0};
     int max_retranfsmissions = 3;
     int attempts = 0;
     bool ack_received = false;
+
+    printf("Buffer Size: %d\n", bufSize);
+    for (int i = 0; i < bufSize; i++){
+        printf("Buffer[%d]: %02x\n", i, buf[i]);
+    }
 
     while (attempts < max_retranfsmissions && !ack_received){
         frameSize = 0;
@@ -428,28 +461,49 @@ int llwrite(const unsigned char *buf, int bufSize){
         frame[frameSize++] = SENDER_ADDRESS ^ current_control_field;
 
         // add data payload and calculte BCC2
-        unsigned char stuffedData[BUF_SIZE] = {0};
+        unsigned char stuffedData[MAX_PAYLOAD_SIZE * 2] = {0};
         unsigned char BCC2 = 0;
 
         for (int i = 0; i < bufSize; i++){
             BCC2 ^= buf[i];
         }
 
+
         int stuffedDataSize = performByteStuffing(buf,bufSize,stuffedData);
         // frame[frameSize++] = BCC2;
         // frame[frameSize++] = FLAG;
+
+        printf("________________________________ \n");
+        printf("Stuffed Data: ");
+        for (int i = 0; i < stuffedDataSize; i++){
+            printf("%02x ", stuffedData[i]);
+        }
+        printf("\n");
+        
 
         //copy stuffed data to the frame 
         memcpy(&frame[frameSize],stuffedData,stuffedDataSize);
         frameSize += stuffedDataSize;
 
+        printf("Frame Size: %d\n", frameSize);
+
+
         //add BCC2 to frame and apply stuffing to BCC2 
         unsigned char stuffedBCC2[2];
         int stuffedBCC2Size = performByteStuffing(&BCC2,1,stuffedBCC2);
 
+        for(int i = 0; i < stuffedBCC2Size; i++){
+            printf("Stuffed BCC2: %02x\n", stuffedBCC2[i]);
+        }
+
         memcpy(&frame[frameSize],stuffedBCC2,stuffedBCC2Size);
         frameSize += stuffedBCC2Size;
 
+        printf("Frame Size: %d\n", frameSize);
+
+        frame[frameSize++] = FLAG;
+
+        printf("Frame Size: %d\n", frameSize);
 
         // send the frame over the serial port
         int bytesWritten = write(fd, frame, frameSize);
@@ -457,12 +511,24 @@ int llwrite(const unsigned char *buf, int bufSize){
             perror("Error writing frame");
             return -1;
         }
+    //Till here GOOD
 
         printf("Frame sent, awaiting acknowledgment...\n");
-
+        printf("Frame sent, awaiting acknowledgment...\n");
         // wait for acknowledgment or negative acknowledgment
+        int responseSize = 0;
         unsigned char response[5] = {0};
-        int responseSize = read(fd, response, sizeof(response));
+
+        for (int i = 0; i < 5; i++){
+            if(read(fd, &response[i], 1)){
+                responseSize++;
+            }
+        }
+        
+        printf("Response Size: %d\n", responseSize);
+        printf("Response: %02x %02x %02x %02x %02x\n", response[0], response[1], response[2], response[3], response[4]);
+
+        //int responseSize = read(fd, response, sizeof(response));
 
         if (responseSize < 5){
             printf("Error: Incomplete responde received\n");
@@ -504,7 +570,13 @@ int llwrite(const unsigned char *buf, int bufSize){
     - The receiver will only accept frames with the correct address 
     - The control field is now used to number the frames
 
+
+
+
+
 */
+
+
 ////////////////////////////////////////////////
 // LLREAD - AUXILIARY FUNCTIONS
 ////////////////////////////////////////////////
@@ -561,7 +633,7 @@ bool BCC2_validation(const unsigned char *frame, int packet_size) {
         bcc2_calculated ^= frame[i];
     }
     
-    printf("BCC2: 0x%02X\n", bcc2_calculated);
+    printf("?BCC2: 0x%02X\n", bcc2_calculated);
 
     if (bcc2 != bcc2_calculated){
         return FALSE;

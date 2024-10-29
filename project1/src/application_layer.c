@@ -133,14 +133,29 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
         // I KEEP this PACKET_SIZE for the next steps SO THAT I CAN BUILD THE DATA PACKET THE PACKET PAYLOAD
         packet_size = controlBuilder(filename, start_packet, end_packet);
+        for (int i = 0; i < packet_size; i++){
+            printf("0x%02X ", start_packet[i]);
+        }
+        printf("\n");
+        for (int i = 0; i < packet_size; i++){
+            printf("0x%02X ", end_packet[i]);
+        }
+        printf("\n");
+        printf("Packet Size: %d\n", packet_size);
         //unsigned char packet_payload[packet_size - 1]; //char or unsigned char? 
         unsigned char *packet_payload = (unsigned char *)malloc(packet_size - 1);
 
         for (int i = 0; i < packet_size; i++){
             packet_payload[i] = start_packet[i];
         }
+
+        printf("Packet Payload:\n");
+        for (int i = 0; i < packet_size; i++){
+            printf("0x%02X ", packet_payload[i]);
+        }
         
-        int num_written_chars = llwrite(packet_payload, packet_size);
+        int num_written_chars = llwrite(packet_payload, packet_size); //Até aqui is correct
+        printf("Num written chars: %d\n", num_written_chars);
         if (num_written_chars < packet_size){
             printf("Error: llwrite\n");
             return;
