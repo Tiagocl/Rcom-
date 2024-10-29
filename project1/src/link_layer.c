@@ -28,6 +28,8 @@ int fd; // Global File descriptor
 
 // Link layer specific values
 #define FLAG 0x7E
+#define ESCAPE 0x7D
+#define XOR_BYTE 0x20
 #define SENDER_ADDRESS 0x03
 #define RECEIVER_ADDRESS 0x01
 
@@ -366,6 +368,33 @@ int llopen(LinkLayer connectionParameters)
     return 100;
 }
 
+// LLWRITE notes
+/*
+    -
+    - We have to perform byte stuffing
+
+*/
+int performByteStuffing(const unsigned char *input, int inputSize, unsigned char *output) {
+    int outputSize = 0; 
+
+    for(int i=0; i<inputSize;i++) {
+        unsigned char byte = input[i];
+
+        if(byte == FLAG) {
+            output[outputSize++] = ESCAPE;
+            output[outputSize++] = FLAG ^ XOR_BYTE;
+        }
+        else if (byte == ESCAPE) {
+            output[outputSize++] = ESCAPE; 
+            output[outputSize++] = ESCAPE ^ XOR_BYTE;
+        }
+        else {
+            output[outputSize++] = byte;
+        }
+    }
+    return outputSize;
+}
+
 ////////////////////////////////////////////////
 // LLWRITE
 ////////////////////////////////////////////////
@@ -375,10 +404,10 @@ int llwrite(const unsigned char *buf, int bufSize)
     static unsigned char current_control_field = INFO_FRAME_0;
     unsigned char frame[BUF_SIZE] = {0};
     int max_retranfsmissions = 3;
-    int attemps = 0;
+    int attempts = 0;
     bool ack_received = false;
 
-    while (attemps < max_retranfsmissions && !ack_received)
+    while (attempts < max_retranfsmissions && !ack_received)
     {
         frameSize = 0;
         frame[frameSize++] = FLAG;
@@ -387,15 +416,29 @@ int llwrite(const unsigned char *buf, int bufSize)
         frame[frameSize++] = SENDER_ADDRESS ^ current_control_field;
 
         // add data payload and calculte BCC2
+        unsigned char stuffedData[BUF_SIZE] = {0};
         unsigned char BCC2 = 0;
 
         for (int i = 0; i < bufSize; i++)
         {
-            frame[frameSize++] = buf[i];
             BCC2 ^= buf[i];
         }
-        frame[frameSize++] = BCC2;
-        frame[frameSize++] = FLAG;
+
+        int stuffedDataSize = performByteStuffing(buf,bufSize,stuffedData);
+        // frame[frameSize++] = BCC2;
+        // frame[frameSize++] = FLAG;
+
+        //copy stuffed data to the frame 
+        memcpy(&frame[frameSize],stuffedData,stuffedDataSize);
+        frameSize += stuffedDataSize;
+
+        //add BCC2 to frame and apply stuffing to BCC2 
+        unsigned char stuffedBCC2[2];
+        int stuffedBCC2Size = performByteStuffing(&BCC2,1,stuffedBCC2);
+
+        memcpy(&frame[frameSize],stuffedBCC2,stuffedBCC2Size);
+        frameSize += stuffedBCC2Size;
+
 
         // send the frame over the serial port
         int bytesWritten = write(fd, frame, frameSize);
@@ -414,11 +457,11 @@ int llwrite(const unsigned char *buf, int bufSize)
         if (responseSize < 5)
         {
             printf("Error: Incomplete responde received\n");
-            attemps++;
+            attempts++;
             continue;
         }
 
-        if (response[0] != FLAG && response[4] != FLAG)
+        if (response[0] == FLAG && response[4] == FLAG)
         {
             if (response[2] == CONTROL_RR_0 || response[2] == CONTROL_RR_1)
             {
@@ -429,12 +472,12 @@ int llwrite(const unsigned char *buf, int bufSize)
             else if (response[2] == CONTROL_REJ_0 || response[2] == CONTROL_REJ_1)
             {
                 printf("Negative Ack (REJ) received\n");
-                attemps++;
+                attempts++;
             }
          } else
             {
                 printf("Error: Invalid control field in response\n");
-                attemps++;
+                attempts++;
             }
         }
         if (!ack_received)
