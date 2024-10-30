@@ -103,6 +103,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     // TODO
     unsigned char start_packet[MAX_PAYLOAD_SIZE];
     unsigned char end_packet[MAX_PAYLOAD_SIZE];
+    int control_packet_size;
     int EOF_flag = 0;
     int data_link_id;
     int packet_size;
@@ -133,6 +134,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
         // I KEEP this PACKET_SIZE for the next steps SO THAT I CAN BUILD THE DATA PACKET THE PACKET PAYLOAD
         packet_size = controlBuilder(filename, start_packet, end_packet);
+        control_packet_size = packet_size;
         for (int i = 0; i < packet_size; i++){
             printf("0x%02X ", start_packet[i]);
         }
@@ -143,7 +145,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         printf("\n");
         printf("Packet Size: %d\n", packet_size);
         //unsigned char packet_payload[packet_size - 1]; //char or unsigned char? 
-        unsigned char *packet_payload = (unsigned char *)malloc(packet_size - 1);
+        unsigned char *packet_payload = (unsigned char *)malloc(packet_size); //retirei packet_size - 1 e pus packet_size
 
         for (int i = 0; i < packet_size; i++){
             packet_payload[i] = start_packet[i];
@@ -161,6 +163,8 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             return;
         }
 
+        free(packet_payload);
+
         //int cotrol_packet_size = packet_size;
 
 
@@ -174,12 +178,14 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 }
                 */
 
-
+        packet_payload = (unsigned char *)malloc(MAX_PAYLOAD_SIZE);
         unsigned char data_packet[MAX_PAYLOAD_SIZE] = {0};
         int packet_seq = 0;
         int idx = 0;
         while (!EOF_flag){
-            int read_buffer;
+            
+            unsigned char read_buffer;
+            //int read_buffer;
             if(!fread(&read_buffer, (size_t) 1, (size_t) 1, file)){
                 EOF_flag = 1;
                 packet_size = dataBuilder(data_packet, packet_payload, packet_seq++, idx); //Removed &packet_payload
@@ -195,8 +201,8 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                     return;
                 }
                 memset(data_packet, 0, sizeof(data_packet));
-                //memset(packet_payload, 0, sizeof(packet_payload));
-                memset(packet_payload, 0, packet_size - 1);
+                memset(packet_payload, 0, sizeof(packet_payload));
+                //memset(packet_payload, 0, packet_size - 1);
                 idx = 0;
             }
 
@@ -204,11 +210,17 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         }
 
         fclose(file);
+        free(packet_payload);
 
-        int end_packet_size = sizeof(end_packet) / sizeof(end_packet[0]);
-        memcpy(&packet_payload[idx], end_packet, end_packet_size);
+        //int end_packet_size = sizeof(end_packet) / sizeof(end_packet[0]);
+        //memcpy(&packet_payload[idx], end_packet, end_packet_size);
 
-        if(llwrite(packet_payload, idx + end_packet_size) < 0){
+        packet_payload = (unsigned char *)malloc(control_packet_size);
+        for (int i = 0; i < control_packet_size; i++){
+            packet_payload[i] = end_packet[i];
+        }
+
+        if(llwrite(packet_payload, control_packet_size) < 0){
             printf("Error: llwrite\n");
             return;
         }
@@ -226,7 +238,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             //int idx = 0;
 
             packet_size = llread(received_packet);
-
+            if(packet_size == 0) break;
             if (received_packet[0] == CONTROL_END) {
                 printf("\nClosed penguin\n");
                 if (file != NULL) {

@@ -187,6 +187,9 @@ int state_machine(unsigned char *buf, int readBytes) {
 // LLOPEN - AUXILIARY FUNCTIONS
 ////////////////////////////////////////////////
 
+
+
+
 int checkUAFrame(int fd, unsigned char *receiverBuf, size_t buff_size) {
     
     printf("Bytes checkUAFrame Read: %lu\n", buff_size);
@@ -597,7 +600,7 @@ unsigned char readyFrameCalculator(unsigned char control_received){
     if (control_received == 0x00){
         return CONTROL_RR_1;
     } else if (control_received == 0x80){
-        return CONTROL_REJ_0;
+        return CONTROL_RR_0;
     } else {
         printf("Error: Receiver Ready Frame\n");
     }
@@ -661,6 +664,42 @@ int packet_size_calculator(const unsigned char *frame, int frame_size) {
 
     return packet_size;
 }
+
+int checkDISCFrame( unsigned char *receiver_buff, size_t buff_size){
+
+    if (buff_size < 0) {
+        perror("Error receiving DISC frame");
+        return FALSE;
+    }
+
+    if (buff_size < 5) {
+        printf("Error: Incomplete DISC frame received\n");
+        return FALSE;
+    }
+    printf("Check DISC ReceiverBuf: ");
+    for (int i = 0; i < 5; i++){
+        printf("%02x ", receiver_buff[i]);
+    }
+
+    if (receiver_buff[0] != FLAG || receiver_buff[4] != FLAG) {
+        printf("Error: DISC frame FLAG field mismatch\n");
+        return FALSE;
+    }
+
+    if (receiver_buff[2] != CONTROL_DISC) {
+        printf("Error: DISC frame CONTROL field mismatch\n");
+        return FALSE;
+    }
+
+    unsigned char bcc1 = receiver_buff[1] ^ receiver_buff[2];
+    if (receiver_buff[3] != bcc1) {
+        printf("Error: DISC frame BCC1 field mismatch\n");
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
 ////////////////////////////////////////////////
 // LLREAD
 ////////////////////////////////////////////////
@@ -769,7 +808,10 @@ int llread(unsigned char *packet)
                 }
                 
                 printf("BCC2 Validation Passed\n");
-                printf("Frame Number: %d\n", destuffed_iframe[2]);
+                // Print the frame number in hexadecimal format
+                printf("Frame Number (Decimal): %d\n", destuffed_iframe[2]);
+                printf("Frame Number (Hex): 0x%02X\n", destuffed_iframe[2]);
+
                 unsigned char rr_command[5] = {0};
                 rr_command[0] = FLAG;
                 rr_command[1] = SENDER_ADDRESS;
@@ -793,7 +835,21 @@ int llread(unsigned char *packet)
                 }
                 return -1;
                 
-           
+            } else if (checkDISCFrame(destuffed_iframe, destuffed_iframe_size)){
+                printf("DISC Frame Received\n");
+                unsigned char disc_command[5] = {0};
+                disc_command[0] = FLAG;
+                disc_command[1] = SENDER_ADDRESS;
+                disc_command[2] = CONTROL_DISC;
+                disc_command[3] = disc_command[1] ^ disc_command[2];
+                disc_command[4] = FLAG;
+                int valid = write(fd, disc_command, sizeof(disc_command));
+                if (valid < 0){
+                    printf("Error: Writing UA Frame\n");
+                }
+                printf("???Segmentation Fault????\n");
+                return 5;       ///????????????????????
+
             } else{
                 unsigned char rej_command[5] = {0};
                 rej_command[0] = FLAG;
@@ -864,7 +920,9 @@ int llclose(int showStatistics)
 
         while (alarmCount < retransmissionAttempts) {
             //unsigned char event_byte[1] = {0};
-
+            printf("Alarm Enabled: %d\n", alarmEnabled);
+            printf("Alarm Count: %d\n", alarmCount);
+            printf("HELLO\n");
             if(!alarmEnabled){
                 printf("Sending Tx DISC Frame\n");
                 int bytes = write(fd, transmissionBuf, sizeof(transmissionBuf));
@@ -875,11 +933,20 @@ int llclose(int showStatistics)
                 setAlarm(retransmissionTimeout);
             }
 
-            int response = read(fd, receiverBuf, 5);
             
+            int response = 0;
+            for(int i = 0; i < 5; i++){
+                if(read(fd, &receiverBuf[i], 1) == 1){
+                    response++;
+                }
+            }
+            
+            printf("Bytes Read on DISC Response: %d\n", response);
             if (response == 5) {
                 printf("Receiving Rx DISC Frame\n");
-                if(state_machine(receiverBuf, response) == TRUE){
+                int state_machine_response = state_machine(receiverBuf, response);
+                printf("State Machine Response: %d\n", state_machine_response);
+                if((state_machine_response) == TRUE){
                     if(receiverBuf[2] == CONTROL_DISC){
                         printf("Rx DISC Frame Received\n");
                         transmissionBuf[0] = FLAG;
