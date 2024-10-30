@@ -452,9 +452,12 @@ int llwrite(const unsigned char *buf, int bufSize){
     bool ack_received = false;
 
     printf("Buffer Size: %d\n", bufSize);
+    
+/* 
     for (int i = 0; i < bufSize; i++){
         printf("Buffer[%d]: %02x\n", i, buf[i]);
     }
+*/
 
     while (attempts < max_retranfsmissions && !ack_received){
         frameSize = 0;
@@ -478,9 +481,11 @@ int llwrite(const unsigned char *buf, int bufSize){
 
         printf("________________________________ \n");
         printf("Stuffed Data: ");
+/*        
         for (int i = 0; i < stuffedDataSize; i++){
             printf("%02x ", stuffedData[i]);
         }
+*/
         printf("\n");
         
 
@@ -712,8 +717,9 @@ int llread(unsigned char *packet)
     int reading_flag = TRUE;
     enum states current_state = STATE_START;
     
+    printf("Started Reading\n");
     while (reading_flag){
-        printf("Reading\n");
+        
         int bytesRead = read(fd, receiverBuf, 1);
         if (bytesRead <= 0){
             printf("Read no Bytes From Serial Port\n");
@@ -722,6 +728,7 @@ int llread(unsigned char *packet)
 
         switch (current_state){
                 case STATE_START:
+                    printf("STATE_START\n");
                     if (receiverBuf[0] == FLAG){
                         current_state = STATE_FLAG_RCV;
                         stuffed_iframe[stuffed_iframe_size++] = receiverBuf[0];
@@ -729,9 +736,12 @@ int llread(unsigned char *packet)
                     break;
 
                 case STATE_FLAG_RCV:
+                    printf("STATE_FLAG_RCV\n");
                     if (receiverBuf[0] == FLAG){
+                        printf("FLAG RCV\n");
                         current_state = STATE_FLAG_RCV; ///////////////Should i send to the first state?
                     } else {
+                        printf("FLAG NOT RCV\n");
                         current_state = STATE_STOP;
                         stuffed_iframe[stuffed_iframe_size++] = receiverBuf[0];
                     }
@@ -742,6 +752,7 @@ int llread(unsigned char *packet)
                         
 
                     if (receiverBuf[0] == FLAG){
+                        printf("STATE_STOP\n");
                         current_state = STATE_START;
                         reading_flag = FALSE;
                     }
@@ -789,11 +800,12 @@ int llread(unsigned char *packet)
             //verifying the BCC2
             printf("Destuffed Frame Size: %d\n", destuffed_iframe_size);
             int packet_size = packet_size_calculator(destuffed_iframe, destuffed_iframe_size);
-
+/*
             printf("Destuffed iframe:\n");
             for (int i = 0; i < destuffed_iframe_size; i++) {
                 printf("0x%02X ", destuffed_iframe[i]);
             }
+*/
             printf("\n");
 
             if(BCC2_validation(destuffed_iframe, destuffed_iframe_size)){     //////////////// Changed 2nd argument from packet size to destuffed_iframe_size
@@ -837,6 +849,7 @@ int llread(unsigned char *packet)
                 
             } else if (checkDISCFrame(destuffed_iframe, destuffed_iframe_size)){
                 printf("DISC Frame Received\n");
+/*
                 unsigned char disc_command[5] = {0};
                 disc_command[0] = FLAG;
                 disc_command[1] = SENDER_ADDRESS;
@@ -847,8 +860,9 @@ int llread(unsigned char *packet)
                 if (valid < 0){
                     printf("Error: Writing UA Frame\n");
                 }
+*/
                 printf("???Segmentation Fault????\n");
-                return 5;       ///????????????????????
+                return 0;       ///????????????????????
 
             } else{
                 unsigned char rej_command[5] = {0};
@@ -911,12 +925,12 @@ int llread(unsigned char *packet)
 ////////////////////////////////////////////////
 int llclose(int showStatistics)
 {
-    unsigned char transmissionBuf[5] = {0}, receiverBuf[5] = {0};
-    transmissionBuf[0] = FLAG;
-    transmissionBuf[1] = SENDER_ADDRESS;
-    transmissionBuf[2] = CONTROL_DISC;
-    transmissionBuf[3] = transmissionBuf[1] ^ transmissionBuf[2];
-    transmissionBuf[4] = FLAG;
+        unsigned char transmissionBuf[5] = {0}, receiverBuf[5] = {0};
+        transmissionBuf[0] = FLAG;
+        transmissionBuf[1] = SENDER_ADDRESS;
+        transmissionBuf[2] = CONTROL_DISC;
+        transmissionBuf[3] = transmissionBuf[1] ^ transmissionBuf[2];
+        transmissionBuf[4] = FLAG;
 
         while (alarmCount < retransmissionAttempts) {
             //unsigned char event_byte[1] = {0};
@@ -960,7 +974,7 @@ int llclose(int showStatistics)
                         }
                         printf("Sending UA Frame\n");
                         break;
-                    } else if (receiverBuf[2] == CONTROL_UA){
+                    } else if (receiverBuf[2] == CONTROL_UA){       // DONT THINK THIS IS NEEDED
                         printf("Rx UA Frame Received\n");
                         break;
                     }     
@@ -977,6 +991,8 @@ int llclose(int showStatistics)
         alarmCount = 0;
 
     
-    int clstat = closeSerialPort();
-    return clstat;
+        int clstat = closeSerialPort();
+        printf("Serial port closed\n");
+        printf("clstat: %d\n", clstat);
+        return clstat;
 }

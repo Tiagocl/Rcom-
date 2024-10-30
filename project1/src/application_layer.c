@@ -238,23 +238,29 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             //int idx = 0;
 
             packet_size = llread(received_packet);
-            if(packet_size == 0) break;
-            if (received_packet[0] == CONTROL_END) {
-                printf("\nClosed penguin\n");
-                if (file != NULL) {
-                    fclose(file);
-                }
+            printf("Packet Size: %d\n", packet_size);
+            printf("HELLLLLOOOOO");
+            if(packet_size == 0){
                 READING_flag = 0;
-            } else if (received_packet[0] == CONTROL_START) {
-                printf("\nOpened penguin\n");
-                file = fopen(filename, "wb");
-                if (file == NULL) {
-                    printf("Error: Opening file\n");
-                    return;
-                }
+                break;
             } else{
-                for (int i = 4; i < packet_size; i++) {
-                    fputc(received_packet[i], file);
+                if (received_packet[0] == CONTROL_END) {
+                    printf("\nClosed penguin\n");
+                    if (file != NULL) {
+                        fclose(file);
+                    }
+                    READING_flag = 0;
+                } else if (received_packet[0] == CONTROL_START) {
+                    printf("\nOpened penguin\n");
+                    file = fopen(filename, "wb");
+                    if (file == NULL) {
+                        printf("Error: Opening file\n");
+                        return;
+                    }
+                } else{
+                    for (int i = 4; i < packet_size; i++) {
+                        fputc(received_packet[i], file);
+                    }
                 }
             }
         }
