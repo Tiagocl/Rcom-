@@ -213,6 +213,7 @@ void startlog(const char *filename)
     par.logfile = fopen(filename, "w");
     if (par.logfile != NULL)
     {
+        setvbuf(par.logfile, NULL, _IOLBF, 0);
         fprintf(par.logfile, "Tx->Rx | Rx->Tx\n");
         printf("LOGGING TO FILE %s\n", filename);
     }

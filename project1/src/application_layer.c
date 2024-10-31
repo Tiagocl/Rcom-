@@ -15,6 +15,7 @@
 #define CONTROL_PACKET_PARAMETER_FILE_SIZE 0
 #define CONTROL_PACKET_PARAMETER_FILENAME 1
 
+int pinguim = FALSE;
 
 ////////////////////////////////////////////////
 // ApplicationLayer Auxiliar Functions        //
@@ -146,7 +147,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         }
         printf("\n");
 */        
-        printf("APP Packet Size: %d\n", packet_size);
+        //printf("APP Packet Size: %d\n", packet_size);
         //unsigned char packet_payload[packet_size - 1]; //char or unsigned char? 
         unsigned char *packet_payload = (unsigned char *)malloc(packet_size); //retirei packet_size - 1 e pus packet_size
 
@@ -201,16 +202,23 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             if(!fread(&read_buffer, (size_t) 1, (size_t) 1, file)){
                 EOF_flag = 1;
                 packet_size = dataBuilder(data_packet, packet_payload, packet_seq++, idx); //Removed &packet_payload
+                
                 printf("EOF\n");
                 for(int i = 0; i < packet_size; i++){
                     printf("0x%02X ", data_packet[i]);
                 }
                 printf("\n");
 
-                if (llwrite(data_packet, packet_size) < 0){
+
+                num_written_chars = llwrite(data_packet, packet_size);
+                if (num_written_chars < 0){
                     printf("Error: llwrite\n");
                     return;
-                }                
+                }
+
+                printf("Size of packet sent by transmiter: %d\n", packet_size);
+                printf("Size of frame returned by llwrite: %d\n", num_written_chars);
+                       
             } else if((MAX_PAYLOAD_SIZE - 4) == idx){ //MAXPAYLOAD??
                 packet_size = dataBuilder(data_packet, packet_payload, packet_seq++, idx);  //Removed &packet_payload
                 printf("MAX PAYLOAD SIZE REACHED\n");
@@ -224,8 +232,8 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                     return;
                 }
 
-                printf("APP DATA PACKET SENT TO LL: %d\n", packet_size);
-                printf("Size of frame sent by LLWRite: %d\n", num_written_chars);
+                printf("Size of packet sent by transmiter: %d\n", packet_size);
+                printf("Size of frame returned by llwrite: %d\n", num_written_chars);
 
 
                 memset(data_packet, 0, sizeof(data_packet));
@@ -260,7 +268,8 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         free(packet_payload);
         unsigned char tempbuf[1] = {0};
         
-        
+        //printf("Waiting for DISC\n");
+        //printf("llclose computed\n");
 
     } else {
         // Receive file
@@ -272,21 +281,23 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             int packet_size;
             //int idx = 0;
 
+            printf("Reading\n");
             packet_size = llread(received_packet);
+            printf("Packet Size On receiver end: %d\n", packet_size);
             
             
-            printf("Packet Size: %d\n", packet_size);
             //printf("Received Packet: ");
-            
             printf("\n");
 
 
             if(packet_size == 0){
                 READING_flag = 0;
+                //could put llwrite here but thats not correct
                 break;
             } else{
                 if (received_packet[0] == CONTROL_END) {
                     printf("\nClosed penguin\n");
+                    pinguim = TRUE;
                     if (file != NULL) {
                         fclose(file);
                     }
@@ -306,6 +317,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             }
         }
     }
-
+    // NEEd to put something ere to send disc frame
     llclose(data_link_id);
+    
 }

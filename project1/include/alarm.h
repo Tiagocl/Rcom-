@@ -12,4 +12,6 @@ void alarmHandler(int signal);
 
 void setAlarm(int timeout);
 
+void resetAlarm();
+
 #endif // _ALARM_H_

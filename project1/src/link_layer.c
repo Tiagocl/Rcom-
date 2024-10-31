@@ -28,6 +28,9 @@ int lastFrameNumber = -1; // Last frame number fully received
 int retransmissionAttempts = 3; // Counter for the number of retransmissions
 int retransmissionTimeout = 3; // Timeout for retransmissions
 
+//Extern
+extern int pinguim;
+
 //Bit Mask
 #define BIT(n) (1 << n)
 
@@ -58,6 +61,8 @@ int retransmissionTimeout = 3; // Timeout for retransmissions
 #define XOR_BYTE 0x20
 
 typedef enum states (*State_transition)(void);
+
+LinkLayerRole role;
 
 enum states{
     STATE_START,
@@ -192,7 +197,7 @@ int state_machine(unsigned char *buf, int readBytes) {
 
 int checkUAFrame(int fd, unsigned char *receiverBuf, size_t buff_size) {
     
-    printf("Bytes checkUAFrame Read: %lu\n", buff_size);
+    //printf("Bytes checkUAFrame Read: %lu\n", buff_size);
 
     //int response = read(fd, receiverBuf, bufSize);
 
@@ -298,7 +303,7 @@ int llopen(LinkLayer connectionParameters) {
         return -1;
     }
    
-    
+    role = connectionParameters.role;
 
     if(connectionParameters.role == LlTx){
         int num_retransmissions = connectionParameters.nRetransmissions;
@@ -315,15 +320,15 @@ int llopen(LinkLayer connectionParameters) {
         transmissionBuf[3] = SENDER_ADDRESS ^ CONTROL_SET;
         transmissionBuf[4] = FLAG;
 
-        printf("SET Frame Built\n");
-        printf("Set Frame: %x %x %x %x %x\n", transmissionBuf[0], transmissionBuf[1], transmissionBuf[2], transmissionBuf[3], transmissionBuf[4]);
+        //printf("SET Frame Built\n");
+        //printf("Set Frame: %x %x %x %x %x\n", transmissionBuf[0], transmissionBuf[1], transmissionBuf[2], transmissionBuf[3], transmissionBuf[4]);
 
         //Retransmission loop
         while (alarmCount < num_retransmissions) {
             if(!alarmEnabled){
                 int bytes = write(fd, transmissionBuf, sizeof(transmissionBuf));
-                printf("Bytes Sent: %d\n", bytes);
-                printf("Bytes Sent: %02x %02x %02x %02x %02x\n", transmissionBuf[0], transmissionBuf[1], transmissionBuf[2], transmissionBuf[3], transmissionBuf[4]);
+                //printf("Bytes Sent: %d\n", bytes);
+                //printf("Bytes Sent: %02x %02x %02x %02x %02x\n", transmissionBuf[0], transmissionBuf[1], transmissionBuf[2], transmissionBuf[3], transmissionBuf[4]);
                 if(bytes < 5){
                     printf("Error Sending SET Frame\n");
                     return -1;
@@ -336,15 +341,15 @@ int llopen(LinkLayer connectionParameters) {
                         receiver_buff_size++;
                     } 
                 }
-
-                printf("Receiver Buff Size: %d\n", receiver_buff_size);
+/*
+                //printf("Receiver Buff Size: %d\n", receiver_buff_size);
 
                 for (int i = 0; i < receiver_buff_size; i++){
                     printf("ReceiverBuf[%d]: %02x\n", i, receiverBuf[i]);
                 }
-                
+ */               
                 int checkUA = checkUAFrame(fd, receiverBuf, receiver_buff_size);
-                printf("CheckUA: %d\n", checkUA);
+                //printf("CheckUA: %d\n", checkUA);
                 if (checkUA == 0) { //Does it need to be a pointer??? receiver buf == 0) {
                     alarmEnabled = FALSE;
                     continue;
@@ -392,7 +397,7 @@ int llopen(LinkLayer connectionParameters) {
             printf("Error Receiving SET Frame: State Machine Stopped\n");
             return -1;
         } else {
-            printf("SET Frame Received\n");
+            //printf("SET Frame Received\n");
             unsigned char uaFrame[5] = {0};
             uaFrame[0] = FLAG;
             uaFrame[1] = SENDER_ADDRESS;
@@ -406,7 +411,7 @@ int llopen(LinkLayer connectionParameters) {
                 return -1;
             }
             
-            printf("UA Frame Sent\n");
+            //printf("UA Frame Sent\n");
             return 0;
         }               
     }
@@ -452,7 +457,7 @@ int llwrite(const unsigned char *buf, int bufSize){
     int attempts = 0;
     bool ack_received = false;
 
-    printf("Buffer Size: %d\n", bufSize);
+    //printf("Buffer Size: %d\n", bufSize);
 
 /* 
     for (int i = 0; i < bufSize; i++){
@@ -480,7 +485,7 @@ int llwrite(const unsigned char *buf, int bufSize){
         // frame[frameSize++] = BCC2;
         // frame[frameSize++] = FLAG;
 
-        printf("________________________________ \n");
+        //printf("________________________________ \n");
 /*        
         printf("Stuffed Data: ");
         for (int i = 0; i < stuffedDataSize; i++){
@@ -500,18 +505,18 @@ int llwrite(const unsigned char *buf, int bufSize){
         //add BCC2 to frame and apply stuffing to BCC2 
         unsigned char stuffedBCC2[2];
         int stuffedBCC2Size = performByteStuffing(&BCC2,1,stuffedBCC2);
-
+/*
         for(int i = 0; i < stuffedBCC2Size; i++){
             printf("Stuffed BCC2: %02x\n", stuffedBCC2[i]);
         }
-
+*/
         memcpy(&frame[frameSize],stuffedBCC2,stuffedBCC2Size);
         frameSize += stuffedBCC2Size;
 
         //printf("Frame Size: %d\n", frameSize);
 
         frame[frameSize++] = FLAG;
-        
+ /*       
         printf("________________________________________________________________________________________\n");
         printf("Frame Size: %d\n", frameSize);
         //printf("Frame: ");
@@ -520,6 +525,7 @@ int llwrite(const unsigned char *buf, int bufSize){
         }
         printf("\n");
         printf("________________________________________________________________________________________\n");
+*/
         
         // send the frame over the serial port
         int bytesWritten = write(fd, frame, frameSize);
@@ -574,20 +580,15 @@ int llwrite(const unsigned char *buf, int bufSize){
                     default: 
                         break;
                 }
-
-
-                printf("State: %d\n", state);
-                printf("Byte result %d\n", state == STATE_STOP);
             }
-            printf("Almost out");
         }
         
 
-        
+/*       
         printf("Response Size: %d\n", responseSize);
         printf("Response: %02x %02x %02x %02x %02x\n", response[0], response[1], response[2], response[3], response[4]);
-
         //int responseSize = read(fd, response, sizeof(response));
+*/
 
         if (responseSize < 5){
             printf("Error: Incomplete responde received\n");
@@ -600,6 +601,7 @@ int llwrite(const unsigned char *buf, int bufSize){
                 printf("Ack (RR) received\n");
                 ack_received = true;
                 current_control_field = (current_control_field == INFO_FRAME_0) ? INFO_FRAME_1 : INFO_FRAME_0;
+                resetAlarm();
             }
             else if (response[2] == CONTROL_REJ_0 || response[2] == CONTROL_REJ_1){
                 printf("Negative Ack (REJ) received\n");
@@ -691,13 +693,13 @@ bool BCC2_validation(const unsigned char *frame, int packet_size) {
     unsigned char bcc2 = frame[packet_size - 2];
     unsigned char bcc2_calculated = frame[4];
     
-    printf("BCC2 Packet Size: %d\n", packet_size);
+    //printf("BCC2 Packet Size: %d\n", packet_size);
 
     for (int i = 5; i < packet_size - 2; i++) {
         bcc2_calculated ^= frame[i];
     }
     
-    printf("?BCC2: 0x%02X\n", bcc2_calculated);
+    //printf("?BCC2: 0x%02X\n", bcc2_calculated);
 
     if (bcc2 != bcc2_calculated){
         return FALSE;
@@ -726,7 +728,7 @@ int packet_size_calculator(const unsigned char *frame, int frame_size) {
     return packet_size;
 }
 
-int checkDISCFrame( unsigned char *receiver_buff, size_t buff_size){
+int checkDISCFrame( unsigned char *receiver_buff, int buff_size){
 
     if (buff_size < 0) {
         perror("Error receiving DISC frame");
@@ -741,6 +743,7 @@ int checkDISCFrame( unsigned char *receiver_buff, size_t buff_size){
     for (int i = 0; i < 5; i++){
         printf("%02x ", receiver_buff[i]);
     }
+    printf("\n");
 
     if (receiver_buff[0] != FLAG || receiver_buff[4] != FLAG) {
         printf("Error: DISC frame FLAG field mismatch\n");
@@ -764,8 +767,7 @@ int checkDISCFrame( unsigned char *receiver_buff, size_t buff_size){
 ////////////////////////////////////////////////
 // LLREAD
 ////////////////////////////////////////////////
-int llread(unsigned char *packet)
-{
+int llread(unsigned char *packet) {
     unsigned char stuffed_iframe[MAX_PAYLOAD_SIZE * 2] = {0};
     //unsigned char *stuffed_iframe = (unsigned char*)malloc(MAX_PAYLOAD_SIZE * 2); //////////// OPTIMIZATIONS FOR LATER
     unsigned char receiverBuf[1] = {0};
@@ -774,7 +776,8 @@ int llread(unsigned char *packet)
     enum states current_state = STATE_START;
     long int total_bytes_read = 0;
     
-    printf("Started Reading\n");
+    //printf("Started Reading\n");
+
     while (reading_flag){
         
         int bytesRead = read(fd, receiverBuf, 1);
@@ -785,185 +788,214 @@ int llread(unsigned char *packet)
         total_bytes_read += bytesRead;
 
         switch (current_state){
-                case STATE_START:
-                    printf("STATE_START\n");
-                    if (receiverBuf[0] == FLAG){
-                        current_state = STATE_FLAG_RCV;
-                        stuffed_iframe[stuffed_iframe_size++] = receiverBuf[0];
-                    }
-                    break;
-
-                case STATE_FLAG_RCV:
-                    printf("STATE_FLAG_RCV\n");
-                    if (receiverBuf[0] == FLAG){
-                        printf("FLAG RCV\n");
-                        current_state = STATE_FLAG_RCV; ///////////////Should i send to the first state?
-                    } else {
-                        printf("FLAG NOT RCV\n");
-                        current_state = STATE_STOP;
-                        stuffed_iframe[stuffed_iframe_size++] = receiverBuf[0];
-                    }
-                    break;
-
-                case STATE_STOP:
-                        stuffed_iframe[stuffed_iframe_size++] = receiverBuf[0];
-                        
-
-                    if (receiverBuf[0] == FLAG){
-                        printf("STATE_STOP\n");
-                        current_state = STATE_START;
-                        reading_flag = FALSE;
-                    }
-                    break;
-                default:
-                    printf("Error: LLOPEN Switch\n");
-                    return -1;
-            }
-        } 
-
-            //verifying first fields in stuffed frame by checking the address and control fields and BCC1
-            //control has the frame number so if there is an error with a given frame i need to send the according REJ(n) frame
-            //to calculate the REJ frame i need to know the frame number of the frame that was received
-            //if the frame number is 0, the REJ frame will have the control field with the frame number 1 and vice versa
-            unsigned char bcc1 = stuffed_iframe[1] ^ stuffed_iframe[2];
-            printf("stuff_iframe[0]: 0x%02X\n", stuffed_iframe[0]);
-            printf("stuff_iframe[1]: 0x%02X\n", stuffed_iframe[1]);
-            printf("stuff_iframe[2]: 0x%02X\n", stuffed_iframe[2]);
-            printf("BCC1 > 0x%02X\n", bcc1);
-
-            if(bcc1 != stuffed_iframe[3] || stuffed_iframe[2] == rxFrameNumber){        //////////////// I need to discern that a dulicated fame is ignores and sent the RR command back
-                printf("Error: BCC1 Mismatch\n");
-                printf("Error: OR\n");
-                printf("Error: Frame Number Mismatch\n");
-                printf("Error: Frame Number > %d\n", stuffed_iframe[2]);
-
-                unsigned char rej_command[5] = {0};
-                rej_command[0] = FLAG;
-                rej_command[1] = RECEIVER_ADDRESS;
-                rej_command[2] = rejectFrameCalculator(stuffed_iframe[2]);
-                rej_command[3] = rej_command[1] ^ rej_command[2];
-                rej_command[4] = FLAG;
-
-                printf("Sending REJ Frame\n");
-                printf("rej_command: 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X\n", rej_command[0], rej_command[1], rej_command[2], rej_command[3], rej_command[4]);
-                printf("sizeof(rej_command): %lu\n", sizeof(rej_command));
-                if (tcflush(fd, TCIOFLUSH) == -1) {
-                    perror("tcflush");
-                    close(fd);
-                    return EXIT_FAILURE;
+            case STATE_START:
+                printf("STATE_START\n");
+                if (receiverBuf[0] == FLAG){
+                    current_state = STATE_FLAG_RCV;
+                    stuffed_iframe[stuffed_iframe_size++] = receiverBuf[0];
                 }
-                write(fd, rej_command, sizeof(rej_command));
-                
-                return -1;
-            }
+                break;
 
-            //destuffing the stuffed frame
-            unsigned char destuffed_iframe[MAX_PAYLOAD_SIZE] = {0};  //////////////// OPTIMIZATIONS FOR LATER with malloc and realoc
-            int destuffed_iframe_size = 0;
-            destuff_frame(stuffed_iframe, stuffed_iframe_size, destuffed_iframe, &destuffed_iframe_size);
+            case STATE_FLAG_RCV:
+                //printf("STATE_FLAG_RCV\n");
+                if (receiverBuf[0] == FLAG){
+                    printf("FLAG RCV\n");
+                    current_state = STATE_FLAG_RCV; ///////////////Should i send to the first state?
+                } else {
+                    //printf("FLAG NOT RCV STARTING TO REGISTER DATA BYTES\n");
+                    current_state = STATE_STOP;
+                    stuffed_iframe[stuffed_iframe_size++] = receiverBuf[0];
+                }
+                break;
 
-            //verifying the BCC2
-            printf("Destuffed Frame Size: %d\n", destuffed_iframe_size);
-            int packet_size = packet_size_calculator(destuffed_iframe, destuffed_iframe_size);
-
-/*
-            printf("Destuffed iframe:\n");
-            for (int i = 0; i < destuffed_iframe_size; i++) {
-                printf("0x%02X ", destuffed_iframe[i]);
-            }
-*/
-            printf("\n");
-
-            if(BCC2_validation(destuffed_iframe, destuffed_iframe_size)){     //////////////// Changed 2nd argument from packet size to destuffed_iframe_size
-                if(destuffed_iframe[4] == 0x01){
+            case STATE_STOP:
+                    stuffed_iframe[stuffed_iframe_size++] = receiverBuf[0];
                     
-                    if(destuffed_iframe[2] == rxFrameNumber){
-                        printf("Duplicated Frame received. Ignoring and sending RR(%d)\n", rxFrameNumber);
-                    } else {
-                        lastFrameNumber = destuffed_iframe[2];
-                    }
-
+                if (receiverBuf[0] == FLAG){
+                    //printf("STATE_STOP\n");
+                    current_state = STATE_START;
+                    reading_flag = FALSE;
                 }
-                
-                printf("BCC2 Validation Passed\n");
-                // Print the frame number in hexadecimal format
-                printf("Frame Number (Decimal): %d\n", destuffed_iframe[2]);
-                printf("Frame Number (Hex): 0x%02X\n", destuffed_iframe[2]);
-
-                unsigned char rr_command[5] = {0};
-                rr_command[0] = FLAG;
-                rr_command[1] = SENDER_ADDRESS;
-                rr_command[2] = readyFrameCalculator(destuffed_iframe[2]);           //////////////// Changed rxFrameNumber to txFrameNumber ptobably not the best idea
-                rr_command[3] = rr_command[1] ^ rr_command[2];                    
-                rr_command[4] = FLAG;
-
-                printf("Sending RR Frame\n");
-                // Print the rr_command in hex
-                printf("RR Command:\n");
-                for (int i = 0; i < 5; i++) {
-                    printf("0x%02X ", rr_command[i]);
-                }
-                printf("\n");
-                //make a for loop that prints the rr_command in hex
-
-
-                int valid = write(fd, rr_command, sizeof(rr_command));
-                if (valid < 0){
-                    printf("Error: Writing RR Frame\n");
-                }
-                printf("RR Frame Sent missing something here\n");
-                printf("NUMBER OF BYTES READ: %ld\n", total_bytes_read);
-                //return -1;      //Isnt this supposed to be 0 or 5
-                
-            } else if (checkDISCFrame(destuffed_iframe, destuffed_iframe_size)){
-                printf("DISC Frame Received\n");
-/*
-                unsigned char disc_command[5] = {0};
-                disc_command[0] = FLAG;
-                disc_command[1] = SENDER_ADDRESS;
-                disc_command[2] = CONTROL_DISC;
-                disc_command[3] = disc_command[1] ^ disc_command[2];
-                disc_command[4] = FLAG;
-                int valid = write(fd, disc_command, sizeof(disc_command));
-                if (valid < 0){
-                    printf("Error: Writing UA Frame\n");
-                }
-*/
-                printf("???Segmentation Fault????\n");
-                return 0;       ///????????????????????
-
-            } else{
-                unsigned char rej_command[5] = {0};
-                rej_command[0] = FLAG;
-                rej_command[1] = SENDER_ADDRESS;
-                rej_command[2] = rejectFrameCalculator(txFrameNumber);
-                rej_command[3] = rej_command[1] ^ rej_command[2];
-                rej_command[4] = FLAG;
-                int valid = write(fd, rej_command, sizeof(rej_command));
-                if (valid < 0){
-                    printf("Error: Writing REJ Frame\n");
-                }
-                printf("Error: here\n");
+                break;
+            default:
+                printf("Error: LLOPEN Switch\n");
                 return -1;
-            }
+        }
+    } 
 
-            //memset(packet,0,sizeof(*packet)); //Added * to clear warning
-            for (int i = 4; i < destuffed_iframe_size - 6; i++){  // 6 bytes are the header and trailer  //////////////// OPTIMIZATIONS FOR LATER//changed packet_size to destuffed_iframe_size
-                packet[i - 4] = destuffed_iframe[i];
-            }
-
-            // Print the packet in hex
-/*            
-            printf("Packet:\n");
-            for (int i = 0; i < destuffed_iframe_size - 6; i++) {
-                printf("0x%02X ", packet[i]);
-            }
-            printf("\n");
+    //verifying first fields in stuffed frame by checking the address and control fields and BCC1
+    //control has the frame number so if there is an error with a given frame i need to send the according REJ(n) frame
+    //to calculate the REJ frame i need to know the frame number of the frame that was received
+    //if the frame number is 0, the REJ frame will have the control field with the frame number 1 and vice versa
+    unsigned char bcc1 = stuffed_iframe[1] ^ stuffed_iframe[2];
+/*    
+    printf("stuff_iframe[0]: 0x%02X\n", stuffed_iframe[0]);
+    printf("stuff_iframe[1]: 0x%02X\n", stuffed_iframe[1]);
+    printf("stuff_iframe[2]: 0x%02X\n", stuffed_iframe[2]);
+    printf("BCC1 > 0x%02X\n", bcc1);
 */
-            txFrameNumber = !txFrameNumber;
-            rxFrameNumber = !rxFrameNumber;
 
-    return  total_bytes_read;     //packet_size;
+
+    if(bcc1 != stuffed_iframe[3] || stuffed_iframe[2] == rxFrameNumber){        //////////////// I need to discern that a dulicated fame is ignores and sent the RR command back
+        printf("Error: BCC1 Mismatch\n");
+        printf("Error: OR\n");
+        printf("Error: Frame Number Mismatch\n");
+        printf("Error: Frame Number > %d\n", stuffed_iframe[2]);
+
+        unsigned char rej_command[5] = {0};
+        rej_command[0] = FLAG;
+        rej_command[1] = RECEIVER_ADDRESS;
+        rej_command[2] = rejectFrameCalculator(stuffed_iframe[2]);
+        rej_command[3] = rej_command[1] ^ rej_command[2];
+        rej_command[4] = FLAG;
+
+        printf("Sending REJ Frame\n");
+        printf("rej_command: 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X\n", rej_command[0], rej_command[1], rej_command[2], rej_command[3], rej_command[4]);
+        printf("sizeof(rej_command): %lu\n", sizeof(rej_command));
+/*        
+        if (tcflush(fd, TCIOFLUSH) == -1) {
+            perror("tcflush");
+            close(fd);
+            return EXIT_FAILURE;
+        }
+*/
+
+        write(fd, rej_command, sizeof(rej_command));
+        
+        return -1;
+    }
+
+    //destuffing the stuffed frame
+    unsigned char destuffed_iframe[MAX_PAYLOAD_SIZE] = {0};  //////////////// OPTIMIZATIONS FOR LATER with malloc and realoc
+    int destuffed_iframe_size = 0;
+    destuff_frame(stuffed_iframe, stuffed_iframe_size, destuffed_iframe, &destuffed_iframe_size);
+
+    //verifying the BCC2
+    printf("_______________________________\n");
+    printf("Pre Destuffing Frame Size: %d\n", stuffed_iframe_size);
+    printf("Actual pre destuffing frame size: %lu\n", sizeof(stuffed_iframe));
+    printf("Post Destuffing Frame Size: %d\n", destuffed_iframe_size);
+    printf("Actual post destuffing frame size: %lu\n", sizeof(destuffed_iframe));
+    int packet_size = packet_size_calculator(destuffed_iframe, destuffed_iframe_size);
+    printf("Packet Size: %d\n", packet_size);
+    printf("_______________________________\n");
+
+/*
+    printf("Destuffed iframe:\n");
+    for (int i = 0; i < destuffed_iframe_size; i++) {
+        printf("0x%02X ", destuffed_iframe[i]);
+    }
+    printf("\n");
+
+    printf("check disc result: %d\n", checkDISCFrame(destuffed_iframe, destuffed_iframe_size));
+*/
+
+    if(BCC2_validation(destuffed_iframe, destuffed_iframe_size)){     //////////////// Changed 2nd argument from packet size to destuffed_iframe_size
+        if(destuffed_iframe[4] == 0x01){
+            printf("DO NOT ENTER REPLICATION PART IS WRONG ANDbusted\n");
+            if(destuffed_iframe[2] == rxFrameNumber){
+                printf("Duplicated Frame received. Ignoring and sending RR(%d)\n", rxFrameNumber);
+            } else {
+                lastFrameNumber = destuffed_iframe[2];
+            }
+
+        }
+   /*     
+        printf("BCC2 Validation Passed\n");
+        // Print the frame number in hexadecimal format
+        //printf("Frame Number (Decimal): %d\n", destuffed_iframe[2]);
+        printf("Frame Number (Hex): 0x%02X\n", destuffed_iframe[2]);
+*/
+        unsigned char rr_command[5] = {0};
+        rr_command[0] = FLAG;
+        rr_command[1] = SENDER_ADDRESS;
+        rr_command[2] = readyFrameCalculator(destuffed_iframe[2]);           //////////////// Changed rxFrameNumber to txFrameNumber ptobably not the best idea
+        rr_command[3] = rr_command[1] ^ rr_command[2];                    
+        rr_command[4] = FLAG;
+
+/*
+        printf("Sending RR Frame\n");
+        // Print the rr_command in hex
+        printf("RR Command:\n");
+        for (int i = 0; i < 5; i++) {
+            printf("0x%02X ", rr_command[i]);
+        }
+        printf("\n");
+*/
+        int valid = write(fd, rr_command, sizeof(rr_command));
+        if (valid < 0){
+            printf("Error: Writing RR Frame\n");
+        }
+
+        //printf("RR Frame Sent missing something here\n");
+        //printf("NUMBER OF BYTES READ: %ld\n", total_bytes_read);
+        //return -1;      //Isnt this supposed to be 0 or 5
+        
+    } else if (checkDISCFrame(destuffed_iframe, destuffed_iframe_size)){
+        printf("DISC Frame Received\n");
+        unsigned char ua_command[5] = {0};
+        for (int i = 0; i < 5; i++){
+            int read_thing = read(fd, &ua_command[i], 1);
+            if (read_thing < 0){
+                printf("Error: Reading UA Frame\n");
+            }
+        }
+        if (ua_command[2] == CONTROL_UA){
+            printf("UA Frame Received\n");
+            return 0; 
+        } else {
+            printf("Error: UA Frame Not Read\n");
+            return -1;
+        }
+        
+    
+
+
+/*
+        unsigned char disc_command[5] = {0};
+        disc_command[0] = FLAG;
+        disc_command[1] = SENDER_ADDRESS;
+        disc_command[2] = CONTROL_DISC;
+        disc_command[3] = disc_command[1] ^ disc_command[2];
+        disc_command[4] = FLAG;
+        int valid = write(fd, disc_command, sizeof(disc_command));
+        if (valid < 0){
+            printf("Error: Writing UA Frame\n");
+        printf("???Segmentation Fault????\n");
+              ///????????????????????
+*/
+        } else {
+        unsigned char rej_command[5] = {0};
+        rej_command[0] = FLAG;
+        rej_command[1] = SENDER_ADDRESS;
+        rej_command[2] = rejectFrameCalculator(txFrameNumber);
+        rej_command[3] = rej_command[1] ^ rej_command[2];
+        rej_command[4] = FLAG;
+        int valid = write(fd, rej_command, sizeof(rej_command));
+        if (valid < 0){
+            printf("Error: Writing REJ Frame\n");
+        }
+        printf("Error: here\n");
+        return -1;
+    }
+
+    //memset(packet,0,sizeof(*packet)); //Added * to clear warning
+    for (int i = 4; i < destuffed_iframe_size - 2; i++){  // 6 bytes are the header and trailer  //////////////// OPTIMIZATIONS FOR LATER//changed packet_size to destuffed_iframe_size
+        packet[i - 4] = destuffed_iframe[i];
+    }
+
+    // Print the packet in hex
+/*            
+    printf("Packet:\n");
+    for (int i = 0; i < destuffed_iframe_size - 6; i++) {
+        printf("0x%02X ", packet[i]);
+    }
+    printf("\n");
+*/
+    txFrameNumber = !txFrameNumber;
+    rxFrameNumber = !rxFrameNumber;
+
+    return  destuffed_iframe_size - 6;     //packet_size;
 }
 
             //Some caveats that need to be checked:
@@ -992,76 +1024,149 @@ int llread(unsigned char *packet)
 ////////////////////////////////////////////////
 // LLCLOSE
 ////////////////////////////////////////////////
-int llclose(int showStatistics)
-{
-        unsigned char transmissionBuf[5] = {0}, receiverBuf[5] = {0};
-        transmissionBuf[0] = FLAG;
-        transmissionBuf[1] = SENDER_ADDRESS;
-        transmissionBuf[2] = CONTROL_DISC;
-        transmissionBuf[3] = transmissionBuf[1] ^ transmissionBuf[2];
-        transmissionBuf[4] = FLAG;
+int llclose(int showStatistics){
+    int clstat;   
+        if(role == LlTx){
+            unsigned char transmissionBuf[5] = {0}, receiverBuf[5] = {0};
+            transmissionBuf[0] = FLAG;
+            transmissionBuf[1] = SENDER_ADDRESS;
+            transmissionBuf[2] = CONTROL_DISC;
+            transmissionBuf[3] = transmissionBuf[1] ^ transmissionBuf[2];
+            transmissionBuf[4] = FLAG;
 
-        while (alarmCount < retransmissionAttempts) {
-            //unsigned char event_byte[1] = {0};
-            printf("Alarm Enabled: %d\n", alarmEnabled);
-            printf("Alarm Count: %d\n", alarmCount);
-            printf("HELLO\n");
-            if(!alarmEnabled){
-                printf("Sending Tx DISC Frame\n");
-                int bytes = write(fd, transmissionBuf, sizeof(transmissionBuf));
-                if(bytes < 5){
-                    printf("Error Sending SET Frame\n");
-                    return -1;
+            while (alarmCount < retransmissionAttempts) {
+                //unsigned char event_byte[1] = {0};
+                printf("Alarm Enabled: %d\n", alarmEnabled);
+                printf("Alarm Count: %d\n", alarmCount);
+                printf("HELLO\n");
+                if(!alarmEnabled){
+                    printf("Sending Tx DISC Frame\n");
+                    int bytes = write(fd, transmissionBuf, sizeof(transmissionBuf));
+                    if(bytes < 5){
+                        printf("Error Sending DISC Frame\n");
+                        return -1;
+                    }
+                    setAlarm(retransmissionTimeout);
                 }
-                setAlarm(retransmissionTimeout);
+
+                
+                int response = 0;
+                for(int i = 0; i < 5; i++){
+                    if(read(fd, &receiverBuf[i], 1) == 1){
+                        response++;
+                    }
+                }
+                
+                printf("Bytes Read on DISC Response: %d\n", response);
+                if (response == 5) {
+                    printf("Receiving Rx DISC Frame\n");
+                    int state_machine_response = state_machine(receiverBuf, response);
+                    printf("State Machine Response: %d\n", state_machine_response);
+                    if((state_machine_response) == TRUE){
+                        if(receiverBuf[2] == CONTROL_DISC){
+                            printf("Rx DISC Frame Received\n");
+                            transmissionBuf[0] = FLAG;
+                            transmissionBuf[1] = SENDER_ADDRESS;
+                            transmissionBuf[2] = CONTROL_UA;
+                            transmissionBuf[3] = transmissionBuf[1] ^ transmissionBuf[2];
+                            transmissionBuf[4] = FLAG;
+                            if(write(fd, transmissionBuf, sizeof(transmissionBuf)) < 5){
+                                printf("Error Sending UA Frame\n");
+                                return -1;
+                            }
+                            printf("Sending UA Frame\n");
+                            break;
+                        } else if (receiverBuf[2] == CONTROL_UA){       // DONT THINK THIS IS NEEDED
+                            printf("Rx UA Frame Received\n");
+                            break;
+                        }     
+                    }
+                }
             }
 
+            if (alarmCount >= retransmissionAttempts) {
+                printf("Max number of retransmissions reached\n");
+                return -1;
+            }
+
+            alarmEnabled = FALSE;
+            alarmCount = 0;
+
+        
+            clstat = closeSerialPort();
+            printf("Serial port closed\n");
+            printf("clstat: %d\n", clstat);
+        } else{
+            unsigned char transmissionBuf[5] = {0}, receiverBuf[5] = {0};
+            transmissionBuf[0] = FLAG;
+            transmissionBuf[1] = SENDER_ADDRESS;
+            transmissionBuf[2] = CONTROL_DISC;
+            transmissionBuf[3] = transmissionBuf[1] ^ transmissionBuf[2];
+            transmissionBuf[4] = FLAG;
+
+            do
+            {
+                int response = 0;
+                for(int i = 0; i < 5; i++){
+                    if(read(fd, &receiverBuf[i], 1) == 1){
+                        response++;
+                    }
+                }
+                
+            } while ((receiverBuf[1] ^ receiverBuf[2]) != receiverBuf[3] || receiverBuf[2] != CONTROL_DISC);
+
+            printf("WHILE?\n");
             
-            int response = 0;
-            for(int i = 0; i < 5; i++){
-                if(read(fd, &receiverBuf[i], 1) == 1){
-                    response++;
-                }
-            }
             
-            printf("Bytes Read on DISC Response: %d\n", response);
-            if (response == 5) {
-                printf("Receiving Rx DISC Frame\n");
-                int state_machine_response = state_machine(receiverBuf, response);
-                printf("State Machine Response: %d\n", state_machine_response);
-                if((state_machine_response) == TRUE){
-                    if(receiverBuf[2] == CONTROL_DISC){
-                        printf("Rx DISC Frame Received\n");
-                        transmissionBuf[0] = FLAG;
-                        transmissionBuf[1] = SENDER_ADDRESS;
-                        transmissionBuf[2] = CONTROL_UA;
-                        transmissionBuf[3] = transmissionBuf[1] ^ transmissionBuf[2];
-                        transmissionBuf[4] = FLAG;
-                        if(write(fd, transmissionBuf, sizeof(transmissionBuf)) < 5){
-                            printf("Error Sending UA Frame\n");
-                            return -1;
-                        }
-                        printf("Sending UA Frame\n");
-                        break;
-                    } else if (receiverBuf[2] == CONTROL_UA){       // DONT THINK THIS IS NEEDED
-                        printf("Rx UA Frame Received\n");
-                        break;
-                    }     
+
+
+
+            while (alarmCount < retransmissionAttempts) {
+                if(!alarmEnabled){
+                    printf("Sending Tx DISC Frame\n");
+                    int bytes = write(fd, transmissionBuf, sizeof(transmissionBuf));
+                    if(bytes < 5){
+                        printf("Error Sending DISC Frame\n");
+                        return -1;
+                    }
+                    setAlarm(retransmissionTimeout);
+                }
+
+                
+                int response = 0;
+                for(int i = 0; i < 5; i++){
+                    if(read(fd, &receiverBuf[i], 1) == 1){
+                        response++;
+                    }
+                }
+                
+                printf("Bytes Read on ua Response: %d\n", response);
+                if (response == 5) {
+                    printf("Receiving tx ua Frame\n");
+                    int state_machine_response = state_machine(receiverBuf, response);
+                    printf("State Machine Response: %d\n", state_machine_response);
+                    if((state_machine_response) == TRUE){
+                        if(receiverBuf[2] == CONTROL_UA){
+                            printf("tx UA Frame Received\n");
+                                break;
+                            }  
+                    }
                 }
             }
+
+            if (alarmCount >= retransmissionAttempts) {
+                printf("Max number of retransmissions reached\n");
+                return -1;
+            }
+
+            alarmEnabled = FALSE;
+            alarmCount = 0;
+
+        
+            clstat = closeSerialPort();
+            printf("Serial port closed\n");
+            printf("clstat: %d\n", clstat);
+
         }
-
-        if (alarmCount >= retransmissionAttempts) {
-            printf("Max number of retransmissions reached\n");
-            return -1;
-        }
-
-        alarmEnabled = FALSE;
-        alarmCount = 0;
-
-    
-        int clstat = closeSerialPort();
-        printf("Serial port closed\n");
-        printf("clstat: %d\n", clstat);
         return clstat;
 }

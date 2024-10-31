@@ -38,3 +38,10 @@ void setAlarm(int timeout)
     
     printf("Ending program\n");
 }
+
+void resetAlarm()
+{
+    alarmEnabled = FALSE;
+    alarmCount = 0;
+    alarm(0);
+}
