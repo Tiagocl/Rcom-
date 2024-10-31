@@ -323,6 +323,7 @@ int llopen(LinkLayer connectionParameters) {
             if(!alarmEnabled){
                 int bytes = write(fd, transmissionBuf, sizeof(transmissionBuf));
                 printf("Bytes Sent: %d\n", bytes);
+                printf("Bytes Sent: %02x %02x %02x %02x %02x\n", transmissionBuf[0], transmissionBuf[1], transmissionBuf[2], transmissionBuf[3], transmissionBuf[4]);
                 if(bytes < 5){
                     printf("Error Sending SET Frame\n");
                     return -1;
@@ -452,7 +453,7 @@ int llwrite(const unsigned char *buf, int bufSize){
     bool ack_received = false;
 
     printf("Buffer Size: %d\n", bufSize);
-    
+
 /* 
     for (int i = 0; i < bufSize; i++){
         printf("Buffer[%d]: %02x\n", i, buf[i]);
@@ -480,8 +481,8 @@ int llwrite(const unsigned char *buf, int bufSize){
         // frame[frameSize++] = FLAG;
 
         printf("________________________________ \n");
-        printf("Stuffed Data: ");
 /*        
+        printf("Stuffed Data: ");
         for (int i = 0; i < stuffedDataSize; i++){
             printf("%02x ", stuffedData[i]);
         }
@@ -493,7 +494,7 @@ int llwrite(const unsigned char *buf, int bufSize){
         memcpy(&frame[frameSize],stuffedData,stuffedDataSize);
         frameSize += stuffedDataSize;
 
-        printf("Frame Size: %d\n", frameSize);
+        //printf("Frame Size: %d\n", frameSize);
 
 
         //add BCC2 to frame and apply stuffing to BCC2 
@@ -507,31 +508,81 @@ int llwrite(const unsigned char *buf, int bufSize){
         memcpy(&frame[frameSize],stuffedBCC2,stuffedBCC2Size);
         frameSize += stuffedBCC2Size;
 
-        printf("Frame Size: %d\n", frameSize);
+        //printf("Frame Size: %d\n", frameSize);
 
         frame[frameSize++] = FLAG;
-
+        
+        printf("________________________________________________________________________________________\n");
         printf("Frame Size: %d\n", frameSize);
-
+        //printf("Frame: ");
+        for (int i = 0; i < frameSize; i++){
+            printf("%02x ", frame[i]);
+        }
+        printf("\n");
+        printf("________________________________________________________________________________________\n");
+        
         // send the frame over the serial port
         int bytesWritten = write(fd, frame, frameSize);
         if (bytesWritten < 0){
             perror("Error writing frame");
             return -1;
         }
+
     //Till here GOOD
 
-        printf("Frame sent, awaiting acknowledgment...\n");
+        //printf("Frame sent, awaiting acknowledgment...\n");
         printf("Frame sent, awaiting acknowledgment...\n");
         // wait for acknowledgment or negative acknowledgment
-        int responseSize = 0;
-        unsigned char response[5] = {0};
-
+/*        
         for (int i = 0; i < 5; i++){
             if(read(fd, &response[i], 1)){
                 responseSize++;
             }
         }
+*/
+        printf("Entering new State Machine\n");
+        unsigned char byte;
+        enum states state = STATE_START;
+        int responseSize = 0;
+        unsigned char response[5] = {0};
+
+        while (responseSize < 5){
+            if (read(fd, &byte, 1) > 0){
+                printf("Byte Read: %02x\n", byte);
+                switch (state) {
+                    case STATE_START:
+                        if (byte == FLAG){state = STATE_FLAG_RCV; response[responseSize++] = byte;} 
+                        break;
+                    case STATE_FLAG_RCV:
+                        if (byte == SENDER_ADDRESS) {state = STATE_A_RCV; response[responseSize++] = byte;}
+                        else if (byte != FLAG) {state = STATE_START; responseSize = 0;}
+                        break;
+                    case STATE_A_RCV:
+                        if (byte == CONTROL_RR_0 || byte == CONTROL_RR_1) {state = STATE_C_RCV; response[responseSize++] = byte;}
+                        else if (byte == FLAG) {state = STATE_FLAG_RCV; responseSize = 1;}
+                        else {state = STATE_START, responseSize = 0;};
+                        break;
+                    case STATE_C_RCV:
+                        if (byte == (CONTROL_RR_0 ^ SENDER_ADDRESS) || byte == (CONTROL_RR_1 ^ SENDER_ADDRESS)) {state = STATE_BCC_OK; response[responseSize++] = byte;}
+                        else if (byte == FLAG) {state = STATE_FLAG_RCV; responseSize = 1;}
+                        else {state = STATE_START; responseSize = 0;}
+                        break;
+                    case STATE_BCC_OK:
+                        if (byte == FLAG) {state = STATE_STOP; response[responseSize++] = byte;}
+                        else {state = STATE_START; responseSize = 0;}
+                        break;
+                    default: 
+                        break;
+                }
+
+
+                printf("State: %d\n", state);
+                printf("Byte result %d\n", state == STATE_STOP);
+            }
+            printf("Almost out");
+        }
+        
+
         
         printf("Response Size: %d\n", responseSize);
         printf("Response: %02x %02x %02x %02x %02x\n", response[0], response[1], response[2], response[3], response[4]);
@@ -554,17 +605,22 @@ int llwrite(const unsigned char *buf, int bufSize){
                 printf("Negative Ack (REJ) received\n");
                 attempts++;
             }
-         } else{
-                printf("Error: Invalid control field in response\n");
-                attempts++;
-            }
+
+        } else {
+            printf("Error: Invalid control field in response\n");
+            attempts++;
         }
-        if (!ack_received){
-            printf("Max number of retransmissions reached, frame not sent successfully\n");
-            return -1;
-        }
-        return frameSize;
+
+        memset(response, 0, sizeof(response));
+        responseSize = 0;
+    }
+
+    if (!ack_received){
+        printf("Max number of retransmissions reached, frame not sent successfully\n");
+        return -1;
+    }
     
+    return frameSize;
 }
 
 
@@ -635,7 +691,7 @@ bool BCC2_validation(const unsigned char *frame, int packet_size) {
     unsigned char bcc2 = frame[packet_size - 2];
     unsigned char bcc2_calculated = frame[4];
     
-    printf("Packet Size: %d\n", packet_size);
+    printf("BCC2 Packet Size: %d\n", packet_size);
 
     for (int i = 5; i < packet_size - 2; i++) {
         bcc2_calculated ^= frame[i];
@@ -716,6 +772,7 @@ int llread(unsigned char *packet)
     unsigned stuffed_iframe_size = 0;
     int reading_flag = TRUE;
     enum states current_state = STATE_START;
+    long int total_bytes_read = 0;
     
     printf("Started Reading\n");
     while (reading_flag){
@@ -725,6 +782,7 @@ int llread(unsigned char *packet)
             printf("Read no Bytes From Serial Port\n");
             continue;
         }
+        total_bytes_read += bytesRead;
 
         switch (current_state){
                 case STATE_START:
@@ -787,6 +845,13 @@ int llread(unsigned char *packet)
                 rej_command[4] = FLAG;
 
                 printf("Sending REJ Frame\n");
+                printf("rej_command: 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X\n", rej_command[0], rej_command[1], rej_command[2], rej_command[3], rej_command[4]);
+                printf("sizeof(rej_command): %lu\n", sizeof(rej_command));
+                if (tcflush(fd, TCIOFLUSH) == -1) {
+                    perror("tcflush");
+                    close(fd);
+                    return EXIT_FAILURE;
+                }
                 write(fd, rej_command, sizeof(rej_command));
                 
                 return -1;
@@ -800,6 +865,7 @@ int llread(unsigned char *packet)
             //verifying the BCC2
             printf("Destuffed Frame Size: %d\n", destuffed_iframe_size);
             int packet_size = packet_size_calculator(destuffed_iframe, destuffed_iframe_size);
+
 /*
             printf("Destuffed iframe:\n");
             for (int i = 0; i < destuffed_iframe_size; i++) {
@@ -845,7 +911,9 @@ int llread(unsigned char *packet)
                 if (valid < 0){
                     printf("Error: Writing RR Frame\n");
                 }
-                return -1;
+                printf("RR Frame Sent missing something here\n");
+                printf("NUMBER OF BYTES READ: %ld\n", total_bytes_read);
+                //return -1;      //Isnt this supposed to be 0 or 5
                 
             } else if (checkDISCFrame(destuffed_iframe, destuffed_iframe_size)){
                 printf("DISC Frame Received\n");
@@ -875,26 +943,27 @@ int llread(unsigned char *packet)
                 if (valid < 0){
                     printf("Error: Writing REJ Frame\n");
                 }
-                
+                printf("Error: here\n");
                 return -1;
             }
 
-            memset(packet,0,sizeof(*packet)); //Added * to clear warning
+            //memset(packet,0,sizeof(*packet)); //Added * to clear warning
             for (int i = 4; i < destuffed_iframe_size - 6; i++){  // 6 bytes are the header and trailer  //////////////// OPTIMIZATIONS FOR LATER//changed packet_size to destuffed_iframe_size
                 packet[i - 4] = destuffed_iframe[i];
             }
 
             // Print the packet in hex
+/*            
             printf("Packet:\n");
             for (int i = 0; i < destuffed_iframe_size - 6; i++) {
                 printf("0x%02X ", packet[i]);
             }
             printf("\n");
-
+*/
             txFrameNumber = !txFrameNumber;
             rxFrameNumber = !rxFrameNumber;
 
-    return packet_size;
+    return  total_bytes_read;     //packet_size;
 }
 
             //Some caveats that need to be checked:

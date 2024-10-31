@@ -135,6 +135,8 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         // I KEEP this PACKET_SIZE for the next steps SO THAT I CAN BUILD THE DATA PACKET THE PACKET PAYLOAD
         packet_size = controlBuilder(filename, start_packet, end_packet);
         control_packet_size = packet_size;
+        printf("//////////////////////////////////////////////////////////////////////");
+/*        
         for (int i = 0; i < packet_size; i++){
             printf("0x%02X ", start_packet[i]);
         }
@@ -143,21 +145,26 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             printf("0x%02X ", end_packet[i]);
         }
         printf("\n");
-        printf("Packet Size: %d\n", packet_size);
+*/        
+        printf("APP Packet Size: %d\n", packet_size);
         //unsigned char packet_payload[packet_size - 1]; //char or unsigned char? 
         unsigned char *packet_payload = (unsigned char *)malloc(packet_size); //retirei packet_size - 1 e pus packet_size
 
         for (int i = 0; i < packet_size; i++){
             packet_payload[i] = start_packet[i];
         }
-
+/*
         printf("Packet Payload:\n");
         for (int i = 0; i < packet_size; i++){
             printf("0x%02X ", packet_payload[i]);
         }
+*/        
+        printf("____________________________________________________\n");
+        int num_written_chars = llwrite(packet_payload, packet_size);
+        printf("START APP CONTROL PACKET SENT TO LL: %d\n", packet_size);
+        printf("Size of frame sent by LLWRite: %d\n", num_written_chars);
+
         
-        int num_written_chars = llwrite(packet_payload, packet_size); //Até aqui is correct
-        printf("Num written chars: %d\n", num_written_chars);
         if (num_written_chars < packet_size){
             printf("Error: llwrite\n");
             return;
@@ -178,10 +185,15 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 }
                 */
 
+        //Até aqui is correct
         packet_payload = (unsigned char *)malloc(MAX_PAYLOAD_SIZE);
+
         unsigned char data_packet[MAX_PAYLOAD_SIZE] = {0};
+
+
         int packet_seq = 0;
         int idx = 0;
+        int number_of_data_bytes = 0;
         while (!EOF_flag){
             
             unsigned char read_buffer;
@@ -189,17 +201,33 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             if(!fread(&read_buffer, (size_t) 1, (size_t) 1, file)){
                 EOF_flag = 1;
                 packet_size = dataBuilder(data_packet, packet_payload, packet_seq++, idx); //Removed &packet_payload
+                printf("EOF\n");
+                for(int i = 0; i < packet_size; i++){
+                    printf("0x%02X ", data_packet[i]);
+                }
+                printf("\n");
 
                 if (llwrite(data_packet, packet_size) < 0){
                     printf("Error: llwrite\n");
                     return;
                 }                
-            } else if(MAX_PAYLOAD_SIZE == idx){ //MAXPAYLOAD - 4??
+            } else if((MAX_PAYLOAD_SIZE - 4) == idx){ //MAXPAYLOAD??
                 packet_size = dataBuilder(data_packet, packet_payload, packet_seq++, idx);  //Removed &packet_payload
-                if (llwrite(data_packet, packet_size) < 0){
+                printf("MAX PAYLOAD SIZE REACHED\n");
+                
+                //if (MAX_PAYLOAD_SIZE == packet_size) printf("Packet Size == MAX_PAYLOAD_SIZE: %d\n", packet_size);
+                
+                num_written_chars = llwrite(data_packet, MAX_PAYLOAD_SIZE); //Removed packet_size
+
+                if (num_written_chars < 0){    //Removed packet_size
                     printf("Error: llwrite\n");
                     return;
                 }
+
+                printf("APP DATA PACKET SENT TO LL: %d\n", packet_size);
+                printf("Size of frame sent by LLWRite: %d\n", num_written_chars);
+
+
                 memset(data_packet, 0, sizeof(data_packet));
                 memset(packet_payload, 0, sizeof(packet_payload));
                 //memset(packet_payload, 0, packet_size - 1);
@@ -220,12 +248,19 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             packet_payload[i] = end_packet[i];
         }
 
-        if(llwrite(packet_payload, control_packet_size) < 0){
+        num_written_chars = llwrite(packet_payload, control_packet_size);
+        if(num_written_chars < 0){
             printf("Error: llwrite\n");
             return;
         }
-    
+
+        printf("START APP CONTROL PACKET SENT TO LL: %d\n", control_packet_size);
+        printf("Size of frame sent by LLWRite: %d\n", num_written_chars);
+        
         free(packet_payload);
+        unsigned char tempbuf[1] = {0};
+        
+        
 
     } else {
         // Receive file
@@ -233,13 +268,19 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         int READING_flag = 1;
 
         while (READING_flag){
-            unsigned char received_packet[MAX_PAYLOAD_SIZE * 2] = {0};
+            unsigned char received_packet[MAX_PAYLOAD_SIZE] = {0};
             int packet_size;
             //int idx = 0;
 
             packet_size = llread(received_packet);
+            
+            
             printf("Packet Size: %d\n", packet_size);
-            printf("HELLLLLOOOOO");
+            //printf("Received Packet: ");
+            
+            printf("\n");
+
+
             if(packet_size == 0){
                 READING_flag = 0;
                 break;
@@ -267,5 +308,4 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     }
 
     llclose(data_link_id);
-
 }
