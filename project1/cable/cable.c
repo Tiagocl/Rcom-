@@ -21,7 +21,7 @@
 #define RXDEV "/dev/ttyS11"
 // Baudrate settings are defined in <asm/termbits.h>, which is
 // included by <termios.h>
-#define BAUDRATE B9600         // For struct termios
+#define BAUDRATE B9600        // For struct termios
 #define DEFAULT_BAUDRATE 9600  // For the delaying transmissions
 #define _POSIX_SOURCE 1        // POSIX compliant source
 #define FALSE 0

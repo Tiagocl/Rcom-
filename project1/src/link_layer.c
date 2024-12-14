@@ -240,65 +240,12 @@ int checkUAFrame(int fd, unsigned char *receiverBuf, size_t buff_size) {
 ////////////////////////////////////////////////
 // LLOPEN
 ////////////////////////////////////////////////
-int llopen(LinkLayer connectionParameters) {
-    // Open serial port device for reading and writing and not as controlling tty
-    // because we don't want to get killed if linenoise sends CTRL-C.
-    
- 
-    /*
-    //NONBLOCKING IS MISSIng
-    fd = open(connectionParameters.serialPort, O_RDWR | O_NOCTTY | O_NONBLOCK);
-    if (fd < 0) {
-        perror(connectionParameters.serialPort);
-        exit(-1);
-    }
-
-    struct termios oldtio;
-    struct termios newtio;
-
-    // Save current port settings
-    if (tcgetattr(fd, &oldtio) == -1) {
-        perror("tcgetattr");
-        exit(-1);
-    }
-
-    // Clear struct for new port settings
-    memset(&newtio, 0, sizeof(newtio));
-
-    newtio.c_cflag = connectionParameters.baudRate | CS8 | CLOCAL | CREAD;
-    newtio.c_iflag = IGNPAR;
-    newtio.c_oflag = 0;
-
-    // Set input mode (non-canonical, no echo,...)
-    newtio.c_lflag = 0;
-    newtio.c_cc[VTIME] = 0; // Inter-character timer unused
-    newtio.c_cc[VMIN] = 1;  // Blocking read until 5 chars received
-
-    // VTIME e VMIN should be changed in order to protect with a
-    // timeout the reception of the following character(s)
-
-    // Now clean the line and activate the settings for the port
-    // tcflush() discards data written to the object referred to
-    // by fd but not transmitted, or data received but not read,
-    // depending on the value of queue_selector:
-    //   TCIFLUSH - flushes data received but not read.
-    tcflush(fd, TCIOFLUSH);
-
-    // Set new port settings
-    if (tcsetattr(fd, TCSANOW, &newtio) == -1) {
-        perror("tcsetattr");
-        exit(-1);
-    }
-
-    printf("New termios structure set\n");
-
-    printf("Serial port opened\n");
-    printf("connectionParameters.role: %d\n", connectionParameters.role);*/
+int llopen(LinkLayer connectionParameters) {//resonsible for establishing connection between over a serial port 
 
 
-    fd = openSerialPort(connectionParameters.serialPort, connectionParameters.baudRate);
+    fd = openSerialPort(connectionParameters.serialPort, connectionParameters.baudRate);//opens serial port 
 
-    if (fd < 0) {
+    if (fd < 0) { //check if opened successfully
         printf("Error: Opening Serial Port\n");
         return -1;
     }
@@ -342,11 +289,6 @@ int llopen(LinkLayer connectionParameters) {
                     } 
                 }
 /*
-                //printf("Receiver Buff Size: %d\n", receiver_buff_size);
-
-                for (int i = 0; i < receiver_buff_size; i++){
-                    printf("ReceiverBuf[%d]: %02x\n", i, receiverBuf[i]);
-                }
  */               
                 int checkUA = checkUAFrame(fd, receiverBuf, receiver_buff_size);
                 //printf("CheckUA: %d\n", checkUA);
@@ -427,7 +369,8 @@ int llopen(LinkLayer connectionParameters) {
 */
 int performByteStuffing(const unsigned char *input, int inputSize, unsigned char *output) {
     int outputSize = 0; 
-
+// if a byte in the payload matches one ofth special characters FLAG or ESCAPE
+// it is replaced with a sequence of two bytes to prevent confuion with contrl characters
     for(int i=0; i<inputSize;i++) {
         unsigned char byte = input[i];
 
@@ -457,14 +400,7 @@ int llwrite(const unsigned char *buf, int bufSize){
     int attempts = 0;
     bool ack_received = false;
 
-    //printf("Buffer Size: %d\n", bufSize);
-
-/* 
-    for (int i = 0; i < bufSize; i++){
-        printf("Buffer[%d]: %02x\n", i, buf[i]);
-    }
-*/
-
+    
     while (attempts < max_retranfsmissions && !ack_received){
         frameSize = 0;
         frame[frameSize++] = FLAG;
@@ -482,16 +418,7 @@ int llwrite(const unsigned char *buf, int bufSize){
 
 
         int stuffedDataSize = performByteStuffing(buf,bufSize,stuffedData);
-        // frame[frameSize++] = BCC2;
-        // frame[frameSize++] = FLAG;
-
-        //printf("________________________________ \n");
-/*        
-        printf("Stuffed Data: ");
-        for (int i = 0; i < stuffedDataSize; i++){
-            printf("%02x ", stuffedData[i]);
-        }
-*/
+      
         printf("\n");
         
 
@@ -499,33 +426,20 @@ int llwrite(const unsigned char *buf, int bufSize){
         memcpy(&frame[frameSize],stuffedData,stuffedDataSize);
         frameSize += stuffedDataSize;
 
-        //printf("Frame Size: %d\n", frameSize);
+       
 
 
         //add BCC2 to frame and apply stuffing to BCC2 
         unsigned char stuffedBCC2[2];
         int stuffedBCC2Size = performByteStuffing(&BCC2,1,stuffedBCC2);
-/*
-        for(int i = 0; i < stuffedBCC2Size; i++){
-            printf("Stuffed BCC2: %02x\n", stuffedBCC2[i]);
-        }
-*/
+
         memcpy(&frame[frameSize],stuffedBCC2,stuffedBCC2Size);
         frameSize += stuffedBCC2Size;
 
-        //printf("Frame Size: %d\n", frameSize);
+        
 
         frame[frameSize++] = FLAG;
- /*       
-        printf("________________________________________________________________________________________\n");
-        printf("Frame Size: %d\n", frameSize);
-        //printf("Frame: ");
-        for (int i = 0; i < frameSize; i++){
-            printf("%02x ", frame[i]);
-        }
-        printf("\n");
-        printf("________________________________________________________________________________________\n");
-*/
+
         
         // send the frame over the serial port
         int bytesWritten = write(fd, frame, frameSize);
@@ -539,13 +453,7 @@ int llwrite(const unsigned char *buf, int bufSize){
         //printf("Frame sent, awaiting acknowledgment...\n");
         printf("Frame sent, awaiting acknowledgment...\n");
         // wait for acknowledgment or negative acknowledgment
-/*        
-        for (int i = 0; i < 5; i++){
-            if(read(fd, &response[i], 1)){
-                responseSize++;
-            }
-        }
-*/
+
         printf("Entering new State Machine\n");
         unsigned char byte;
         enum states state = STATE_START;
@@ -569,7 +477,8 @@ int llwrite(const unsigned char *buf, int bufSize){
                         else {state = STATE_START, responseSize = 0;};
                         break;
                     case STATE_C_RCV:
-                        if (byte == (CONTROL_RR_0 ^ SENDER_ADDRESS) || byte == (CONTROL_RR_1 ^ SENDER_ADDRESS)) {state = STATE_BCC_OK; response[responseSize++] = byte;}
+                        if (byte == (CONTROL_RR_0 ^ SENDER_ADDRESS) || byte == (CONTROL_RR_1 ^ SENDER_ADDRESS)) {
+                            state = STATE_BCC_OK; response[responseSize++] = byte;}
                         else if (byte == FLAG) {state = STATE_FLAG_RCV; responseSize = 1;}
                         else {state = STATE_START; responseSize = 0;}
                         break;
